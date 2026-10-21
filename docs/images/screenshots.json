@@ -1,0 +1,45 @@
+{
+  "app_version": "0.5.2-test",
+  "source_commit": "99e76b7ceed9728c966ecb590ad5c681cc6ff3f7",
+  "renderer": "Android native layout / Robolectric 4.16 / API 34",
+  "render_size": "400dp × 890dp at xhdpi; exported at 640px wide",
+  "sample": "Original procedural mountain illustration; no user photos",
+  "limitations": "Rendered application controls, not physical phone captures or NFC completion evidence",
+  "images": {
+    "home.png": {
+      "width": 640,
+      "height": 1424,
+      "sha256": "5e0436d008c480cf32b9ddc2dbd8605d3b029b05d7d7bc3e5218795878a0bc74"
+    },
+    "device.png": {
+      "width": 640,
+      "height": 1424,
+      "sha256": "f7879c6a087d4a1928e1fb82c86b98cd4018c9de0ec38ec3ffc2116a65e950fd"
+    },
+    "logs.png": {
+      "width": 640,
+      "height": 1424,
+      "sha256": "78bd45c1da4ecee46451023dd859b4023b645917a4a1095049f0430dc41c16ea"
+    },
+    "editor-crop.png": {
+      "width": 640,
+      "height": 1424,
+      "sha256": "0786f42aa59cfb2c07b2f5062399ebfe78b727e1774e9e9e2b90b5e087a558a2"
+    },
+    "editor-text.png": {
+      "width": 640,
+      "height": 1424,
+      "sha256": "5b799a3df4564613be08fe4db763b3aab2b54edd2c45ee3bfda1141886802de9"
+    },
+    "editor-frame.png": {
+      "width": 640,
+      "height": 1424,
+      "sha256": "6f3681d4411d6a30a886ef3aa91ce003fb830aadf900b0dc2de526a606918e5c"
+    },
+    "text-style.png": {
+      "width": 640,
+      "height": 1005,
+      "sha256": "9f1895f28cce8f7c20d21fd8ed3ffb0c1adff970a0076408c7eb3a5ef8aaa5ac"
+    }
+  }
+}
