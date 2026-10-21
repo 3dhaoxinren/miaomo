@@ -4,7 +4,7 @@
 
 把喜欢的照片放进墨水屏。面向华为 3.98 英寸、552×768 四色 NFC 墨水屏的 Android 照片编辑与推图 App，使用手机内置 NFC 和 Shizuku，无需 root。
 
-当前版本 **0.5.3-test**，Android 8.0+。实验性项目，实机测试来自小米 17 Pro Max / HyperOS 4；厂商 NFC 接口支持情况因机型和系统而异。
+当前版本 **0.5.5-test**，Android 8.0+。Q-Poll 曾在小米 17 Pro Max / HyperOS 4 做过实机测试；**小米 15 Pro 尚无实机验证**。公开 HyperOS 参考配置包含 ST NFC 扩展，但不是用户手机运行时探测结果。本版本提供按实际芯片识别的独立 ST54L 实验路径；仍需手机实测验收。
 
 > **复杂照片 / 细密抖动的稳定刷图条件：对齐线圈，保持供电。**
 > 先对齐手机与屏幕的 NFC 线圈并全程贴稳；手机 NFC 供能不足、出现 `68CA` 时，可使用经过核对的 **3.3V 辅助供电**改善稳定性。外接电源只补充供能，仍须保持 NFC 对齐通信，直到屏幕刷新完成。具体接法见 [3.3V 供电说明](docs/POWER_3V3.md)。
@@ -15,10 +15,15 @@
 - 多行文字图层：字体、字号、颜色、底色、描边、角度、对齐、复制和排序。
 - 留白、细线、双线、拍立得、胶片相框；撤销/重做与最近编辑状态恢复。
 - InkSight 四色处理、原图/四色对比、保存预览与 NFC 推图。
-- Shizuku Q-Poll 寻卡、D1 读取、传输进度和本地诊断日志导出。
+- Shizuku Q-Poll 寻卡、D1 读取、传输进度和本地诊断日志导出；部分 ROM 可显式启用无 RF 读回兼容。
+- NFC Binder 能力只读盘点，帮助确认 ROM 是否提供 RF 配置、vendor NCI 和 ReaderMode 接口。
 - GitHub 发布版本检查、更新说明和 APK 下载入口；可选启动时每日检查。
 
 照片处理在手机本地完成，无需 InkSight 服务器、API Key 或软路由。更新检查通过 HTTPS 读取 GitHub 的公开发布信息，不上传照片、日志或屏幕标识；自动检查默认关闭。
+
+0.5.5 新增 **ST54L 独立实验适配**：设备页启用后，根据厂商实际 `getChipId()` 选择 ST54L 短帧配置与读回恢复，不再依赖缺失的 `getRfDiscoverConfigurations()`。同时支持四/五参数 ReaderMode。它不向 ST 控制器发送 NXP QTag 命令。小米 15 Pro 尚未实机验证，首次请只检测屏幕并导出日志。
+
+NXP 路径仍要求 `NXP_MW > 0`；只有缺少 RF 快照的 NXP ROM 才需要手动打开“无 RF 配置读回兼容”。ST54L 使用自己独立的原始短帧快照与恢复，不需要打开该 NXP 开关。
 
 ## 界面一览
 
@@ -26,7 +31,7 @@
 | :---: | :---: | :---: |
 | <img src="docs/images/home.png" width="240" alt="喵墨照片页与四色预览"> | <img src="docs/images/editor-crop.png" width="240" alt="横竖构图、旋转、缩放编辑"> | <img src="docs/images/editor-frame.png" width="240" alt="相框样式与照片文字图层"> |
 
-以上为 0.5.3 源码运行后生成的 Android 原生界面渲染，示例画面为合成插画；设备状态为演示，不是手机实拍或实屏刷新照片。更多界面和逐步操作见 **[完整使用指南](docs/USAGE.md)**。
+以上为 0.5.5 源码运行后生成的 Android 原生界面渲染，示例画面为合成插画；设备状态为演示，不是手机实拍或实屏刷新照片。更多界面和逐步操作见 **[完整使用指南](docs/USAGE.md)**。
 
 ## 安装与使用
 
@@ -80,7 +85,7 @@ python3 test_images.py
 python3 build.py
 ```
 
-输出 `build/miaomo-0.5.3.apk`。首次构建在 `build/` 创建本地调试签名，私钥不入库。GitHub Actions 配置了测试、构建和 APK 附件上传；运行结果以 Actions 页面为准。
+输出 `build/miaomo-0.5.5.apk`。首次构建在 `build/` 创建本地调试签名，私钥不入库。GitHub Actions 配置了协议、图像、更新和 NFC 兼容性测试、构建和 APK 附件上传；运行结果以 Actions 页面为准。
 
 如需沿用自己的已有调试签名，可通过环境变量 `MIAOMO_KEYSTORE` 指向本地 keystore；本构建脚本使用调试签名的标准口令，私钥不得提交。Android 更新界面/JSON 解析的可选回归需要 Gradle 8.7：先构建 APK，再运行 `gradle -p tests/android test`；首次运行会下载 Robolectric 测试依赖。
 

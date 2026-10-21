@@ -4,9 +4,9 @@
 
 ## 准备
 
-需要 Android 8.0 以上手机、手机内置 NFC、运行中的 Shizuku，以及保留原 NFC 主控和线圈的华为 3.98 英寸四色墨水屏。现有实机记录来自小米 17 Pro Max / HyperOS 4，其他机型的厂商 NFC 接口支持情况需自行确认。
+需要 Android 8.0 以上手机、手机内置 NFC、运行中的 Shizuku，以及保留原 NFC 主控和线圈的华为 3.98 英寸四色墨水屏。Q-Poll 曾在小米 17 Pro Max / HyperOS 4 测试；**小米 15 Pro 尚无实机验证**。公开 `haotian` 设备树仅显示参考构建包含 ST NFC 扩展，不能确定用户手机当前栈或芯片；RF getter 兼容不代表 vendor command 已适配。
 
-1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.3.apk`。
+1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.5.apk`。
 2. 按 [Shizuku 官方指南](https://shizuku.rikka.app/zh-hans/guide/setup/) 启动 Shizuku。支持无线调试的系统可按指南配对启动，也可使用电脑 ADB 启动；这里不需要 root。
 3. 开启手机 NFC，打开喵墨。无需填写服务器地址或 API Key。照片处理在本地完成；检查更新时才读取 GitHub 公开发布信息。
 
@@ -24,6 +24,22 @@
 找不到卡时，先检查 Shizuku 是否运行并授权、NFC 开关、App 是否在前台，以及线圈位置。去掉手机壳和磁吸配件后重新贴合。检测过程中保持屏幕和手机不动；普通 NFC 寻卡失败，不能单凭此认定屏幕损坏。
 
 「高级诊断」中的 **Q-Poll 寻卡**、**普通 NFC 寻卡对照**、**读取厂商诊断信息** 用于排查兼容性。无需把所有诊断操作都执行一遍才能使用。
+
+### 小米 15 Pro / ST54L 实验适配（0.5.5）
+
+1. 安装 0.5.5，重新连接 Shizuku NFC 服务，先点“读取厂商诊断信息”。新版会记录手机/系统、芯片、固件以及实际 Binder 方法签名。
+2. 只有 `getChipId` 实际返回 `ST54L` 时，在设备页“推送设置”启用 **ST54L 适配试验（小米 15 Pro 等）**，阅读并确认提示。默认关闭；其他 ST 型号和未知芯片会拒绝配置。
+3. 保持 NFC 空闲并贴稳屏幕，先点 **检测屏幕**。该步骤只发送 D1，不上传照片。
+4. ST 路径通过 vendor callback 读取原始短帧，在 shell 目录保存恢复快照，再设置 7A 并核对读回。结束、超时或 App Binder 断开时尝试恢复原值并核对；进程异常终止后会在下一次 ST 会话先恢复已保存快照。
+5. 只有收到标签回调、IsoDep 连接和正确的 D1 响应，才继续测试照片。控制器配置读回成功也不能证明发射、标签派发或刷屏成功。
+
+ST 配置日志可见 `controller_profile=st54l_custom_frames`、`st_vendor_tx/rx`、`st_frames_verified`；正常结束应出现 `restore=st_frames_matched`。若恢复失败会保留 `/data/local/tmp/miaomo-st54l-frames.json` 并阻止新会话；不要手动删除恢复快照，应导出日志排查。
+
+此路径移植上游 ST54L 自定义轮询帧的读取/设置事务，保留快照与回读，**不含 root 注入、MIFARE 重选补丁、APC 增益调节或系统文件修改**。shell 权限可能不允许 vendor callback/命令，ROM 可能没有对应 API，也可能在 ISO-DEP 派发前发生 MIFARE 重选。出现异常时导出本次日志继续适配。本包在开发机完成模拟事务、UI 与构建测试，尚未在小米 15 Pro 证明实际刷屏。
+
+### NXP ROM 缺少 RF getter 时
+
+只有 NFC 厂商 profile 正向报告 `NXP_MW > 0` 时才选择原有 NXP QTag 路径。缺少 `getRfDiscoverConfigurations()` 的 NXP ROM，需在确认没有其他 NFC 操作后手动打开“允许无 RF 配置读回兼容”。该开关默认关闭，结束时无法读取 RF 配置证明恢复，因此日志标记 `restore=not_verifiable`。它不会被用来把 NXP 命令发给 ST54L。
 
 ## 选择照片
 
@@ -107,4 +123,4 @@
 
 ## 图片来源
 
-本页截图来自 0.5.3 源码的 Android 原生界面渲染，使用合成山景插画。NFC、授权和日志状态为渲染环境中的演示状态；截图不是实机连接成功的证明。它们展示实际控件与布局，未用设计稿替代 App 界面。
+本页截图来自 0.5.5 源码的 Android 原生界面渲染，使用合成山景插画。NFC、授权和日志状态为渲染环境中的演示状态；截图不是实机连接成功的证明。它们展示实际控件与布局，未用设计稿替代 App 界面。

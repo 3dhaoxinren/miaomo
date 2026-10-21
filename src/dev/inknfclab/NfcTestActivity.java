@@ -11,6 +11,7 @@ import android.os.*;
 import android.util.Log;
 import android.view.*;
 import android.widget.*;
+import android.app.AlertDialog;
 import org.json.*;
 import rikka.shizuku.Shizuku;
 import java.io.*;
@@ -36,7 +37,7 @@ public final class NfcTestActivity extends Activity {
     private volatile SessionLog session;
     private volatile IBinder remote;
     private volatile IsoDep connection;
-    private volatile boolean active, resumed, destroyed;
+    private volatile boolean active, resumed, destroyed, changingRfCompatibility;
     private boolean binding, smokeRequested, smokeDone, stopping;
     private int diagnosticTestMode=-1;
     private PicturePanel pictures;
@@ -46,8 +47,8 @@ public final class NfcTestActivity extends Activity {
     private TextView state, output, sessionLabel;
     private File pendingExport;
     private final StringBuilder screen=new StringBuilder();
-    private final Shizuku.UserServiceArgs serviceArgs=new Shizuku.UserServiceArgs(new ComponentName("dev.inknfclab.test",DiagnosticService.class.getName()))
-        .daemon(false).processNameSuffix("nfc_diagnostics").version(4).debuggable(true);
+        private final Shizuku.UserServiceArgs serviceArgs=new Shizuku.UserServiceArgs(new ComponentName("dev.inknfclab.test",DiagnosticService.class.getName()))
+        .daemon(false).processNameSuffix("nfc_diagnostics").version(8).debuggable(true);
     private final ServiceConnection serviceConnection=new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
             binding=false; remote=binder; show("Shizuku 诊断服务已连接（shell）"); refresh();
@@ -88,7 +89,42 @@ public final class NfcTestActivity extends Activity {
         pictures=new PicturePanel(this,(type,value)->{SessionLog current=session;if(current!=null)current.event(type,value);if(type.equals("image_prepared"))show("照片四色预览已就绪");else if(type.endsWith("error"))show(type+" / "+value);},()->begin(3),()->stopSession("user_stop"));pages[0].addView(pictures.view);
         AppUi.title(pages[1],"连接你的墨水屏","一次连接，随后即可从照片页推送。");
         LinearLayout device=AppUi.card(this);device.addView(AppUi.text(this,"华为 3.98 英寸四色屏",19,AppUi.INK,true));AppUi.gap(device,8);device.addView(AppUi.text(this,"552 × 768  ·  内置 NFC",13,AppUi.MUTED,false));AppUi.gap(device,20);state=AppUi.text(this,"",14,AppUi.INK,false);device.addView(state);AppUi.gap(device,20);device.addView(AppUi.button(this,"连接 NFC 服务",true,this::connectShizuku));AppUi.gap(device,8);device.addView(AppUi.button(this,"检测屏幕",false,()->begin(2)));pages[1].addView(device);AppUi.gap(pages[1],16);
-        LinearLayout settings=AppUi.card(this);settings.addView(AppUi.text(this,"推送设置",17,AppUi.INK,true));AppUi.gap(settings,10);settings.addView(AppUi.text(this,"刷新上电等待",13,AppUi.INK,false));Spinner wait=new Spinner(this);wait.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"1 秒","2 秒","3 秒","5 秒"}));int[] times={1000,2000,3000,5000};int at=3;for(int i=0;i<4;i++)if(times[i]==getSharedPreferences("refresh",0).getInt("power_wait_ms",5000))at=i;wait.setSelection(at);settings.addView(wait);wait.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> a,View v,int i,long id){getSharedPreferences("refresh",0).edit().putInt("power_wait_ms",times[i]).apply();}public void onNothingSelected(AdapterView<?> a){}});settings.addView(AppUi.text(this,"照片上传与刷新期间，请保持稳定供电和 NFC 贴合。",12,AppUi.MUTED,false));pages[1].addView(settings);AppUi.gap(pages[1],16);
+        LinearLayout settings=AppUi.card(this);settings.addView(AppUi.text(this,"推送设置",17,AppUi.INK,true));AppUi.gap(settings,10);settings.addView(AppUi.text(this,"刷新上电等待",13,AppUi.INK,false));Spinner wait=new Spinner(this);wait.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"1 秒","2 秒","3 秒","5 秒"}));int[] times={1000,2000,3000,5000};int at=3;for(int i=0;i<4;i++)if(times[i]==getSharedPreferences("refresh",0).getInt("power_wait_ms",5000))at=i;wait.setSelection(at);settings.addView(wait);wait.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> a,View v,int i,long id){getSharedPreferences("refresh",0).edit().putInt("power_wait_ms",times[i]).apply();}public void onNothingSelected(AdapterView<?> a){}});settings.addView(AppUi.text(this,"照片上传与刷新期间，请保持稳定供电和 NFC 贴合。",12,AppUi.MUTED,false));pages[1].addView(settings);AppUi.gap(pages[1],8);
+        CheckBox qCompat=new CheckBox(this);qCompat.setText("允许无 RF 配置读回兼容（部分机型）");qCompat.setTextColor(AppUi.INK);qCompat.setTextSize(12);qCompat.setChecked(getSharedPreferences("nfc_compat",0).getBoolean("allow_unverified_rf_snapshot",false));
+        qCompat.setOnCheckedChangeListener((button,checked)->{
+            if(changingRfCompatibility)return;
+            if(active||stopping){changingRfCompatibility=true;qCompat.setChecked(!checked);changingRfCompatibility=false;Toast.makeText(this,"先停止 NFC 会话再改适配模式",Toast.LENGTH_SHORT).show();return;}
+            if(!checked){getSharedPreferences("nfc_compat",0).edit().putBoolean("allow_unverified_rf_snapshot",false).apply();return;}
+            qCompat.setEnabled(false);
+            AlertDialog prompt=new AlertDialog.Builder(this).setTitle("启用无读回兼容模式？")
+                .setMessage("仅在 Q-Poll 报‘getRfDiscoverConfigurations 不存在’时使用。启用后无法核验原 RF 配置，也无法确认射频状态已完整恢复；请先关闭其他 NFC 寻卡/刷卡页面，并确保不会同时运行别的 NFC 任务。若本机缺少 vendor NCI 或 ReaderMode 接口，仍会安全拒绝启动。")
+                .setNegativeButton("取消",null)
+                .setPositiveButton("我确认，仅在 NFC 空闲时使用",null)
+                .create();
+            prompt.setOnCancelListener(dialog->{if(!getSharedPreferences("nfc_compat",0).getBoolean("allow_unverified_rf_snapshot",false)){changingRfCompatibility=true;qCompat.setChecked(false);changingRfCompatibility=false;}qCompat.setEnabled(true);});
+            prompt.show();
+            prompt.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(clicked->{
+                getSharedPreferences("nfc_compat",0).edit().putBoolean("allow_unverified_rf_snapshot",true).commit();
+                changingRfCompatibility=true;qCompat.setChecked(true);changingRfCompatibility=false;qCompat.setEnabled(true);prompt.dismiss();
+            });
+        });
+        settings.addView(qCompat);settings.addView(AppUi.text(this,"仅针对缺少 RF 配置读取接口的 ROM；默认关闭，且不代表已验证该机型射频或面板兼容性。",11,AppUi.MUTED,false));AppUi.gap(pages[1],8);
+        CheckBox stCompat=new CheckBox(this);stCompat.setText("ST54L 适配试验（小米 15 Pro 等）");stCompat.setTextColor(AppUi.INK);stCompat.setTextSize(12);
+        stCompat.setChecked(getSharedPreferences("nfc_compat",0).getBoolean("allow_st54l_experiment",false));
+        stCompat.setOnCheckedChangeListener((toggle,enabled)->{
+            if(changingRfCompatibility)return;
+            if(active||stopping){changingRfCompatibility=true;stCompat.setChecked(!enabled);changingRfCompatibility=false;Toast.makeText(this,"先停止 NFC 会话再改适配模式",Toast.LENGTH_SHORT).show();return;}
+            if(!enabled){getSharedPreferences("nfc_compat",0).edit().putBoolean("allow_st54l_experiment",false).apply();return;}
+            changingRfCompatibility=true;stCompat.setChecked(false);changingRfCompatibility=false;
+            AlertDialog confirm=new AlertDialog.Builder(this).setTitle("ST54L 实验适配")
+                .setMessage("仅在厂商诊断明确报告 ST54L 时使用。本路径先读取并保存原始短帧，再配置 7A 并读回校验；结束恢复原值。它不依赖缺失的 RF getter，也不发送 NXP QTag 命令。小米 15 Pro 尚未实机验证，可能受 ROM 权限、回调或标签派发限制；首次只点检测屏幕，保存日志。请确认没有其他 NFC 操作。")
+                .setNegativeButton("取消",null).setPositiveButton("启用实验适配",null).create();
+            confirm.show();confirm.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(clicked->{
+                getSharedPreferences("nfc_compat",0).edit().putBoolean("allow_st54l_experiment",true).apply();
+                changingRfCompatibility=true;stCompat.setChecked(true);changingRfCompatibility=false;confirm.dismiss();
+            });
+        });
+        settings.addView(stCompat);settings.addView(AppUi.text(this,"按实际芯片选择独立 ST54L 路径；先读 D1，未确认寻卡前不要推图。",11,AppUi.MUTED,false));
         updates=new UpdatePanel(this,()->active);pages[1].addView(updates.view);AppUi.gap(pages[1],14);
         LinearLayout advanced=AppUi.column(this);advanced.setVisibility(View.GONE);pages[1].addView(AppUi.button(this,"高级诊断",false,()->advanced.setVisibility(advanced.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE)));AppUi.gap(pages[1],10);pages[1].addView(advanced);button(advanced,"Q-Poll 寻卡（不发送屏幕命令）",()->begin(4));button(advanced,"普通 NFC 寻卡对照",()->begin(1));button(advanced,"读取厂商诊断信息",this::diagnostics);button(advanced,"仅采集 NFC 日志",()->begin(0));button(advanced,"生成验证用测试图",pictures::prepareDemo);AppUi.gap(pages[1],16);pages[1].addView(AppUi.text(this,"喵墨 "+AppVersion.name(this)+"  /  InkSight 图片处理\nShizuku 通过系统调试服务运行，无需 root。",11,AppUi.MUTED,false));
         AppUi.title(pages[2],"日志与记录","每次推送自动保存，遇到问题可导出调试。");
@@ -140,7 +176,13 @@ public final class NfcTestActivity extends Activity {
     private String qStart() throws Exception {
         IBinder binder=remote;if(binder==null)throw new IOException("Shizuku 未连接");
         Parcel data=Parcel.obtain(),reply=Parcel.obtain();
-        try {data.writeInterfaceToken(DiagnosticService.DESCRIPTOR);data.writeStrongBinder(qOwner);if(!binder.transact(DiagnosticService.Q_START,data,reply,0))throw new IOException("Q-Poll 服务版本过旧");reply.readException();String result=reply.readString();if(result==null || result.startsWith("ERROR "))throw new IOException(result);return result;}
+        try {
+            String serviceVersion=call(DiagnosticService.SERVICE_VERSION);
+            if(!"8".equals(serviceVersion))throw new IOException("Shizuku 诊断服务版本不匹配，请断开并重新连接 NFC 服务后再试。");
+            data.writeInterfaceToken(DiagnosticService.DESCRIPTOR);data.writeStrongBinder(qOwner);data.writeInt(getSharedPreferences("nfc_compat",0).getBoolean("allow_unverified_rf_snapshot",false)?1:0);
+            data.writeInt(getSharedPreferences("nfc_compat",0).getBoolean("allow_st54l_experiment",false)?1:0);
+            if(!binder.transact(DiagnosticService.Q_START,data,reply,0))throw new IOException("Q-Poll 服务版本过旧");reply.readException();String result=reply.readString();if(result==null || result.startsWith("ERROR "))throw new IOException(result);return result;
+        }
         finally {data.recycle();reply.recycle();}
     }
     private byte[] qExchange(SessionLog s,byte[] command,int token,long started) throws Exception {
@@ -220,7 +262,7 @@ public final class NfcTestActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         qSession=useQ;currentMode=mode;currentToken=token;currentFrame=frame;previousQStatus="";
         currentPowerMs=pictures.powerWaitMs();if(mode==3)s.event("refresh_settings","power_wait_ms="+currentPowerMs);
-        s.event("transport",useQ ? "nxp_qpoll_shell" : "standard_reader");
+        s.event("transport",useQ ? "vendor_qpoll_shell" : "standard_reader");
         sessionLabel.setText("会话 "+s.id); s.event("mode",mode==0 ? "log_only" : mode==1 ? "reader_no_apdu" : mode==2 ? "reader_D1_00D1000000" : mode==4 ? "qpoll_no_apdu" : "image_push");
         show("新会话 "+s.id+" / "+(mode==0 ? "只采集日志" : mode==1 ? "普通寻卡：不发送 APDU" : mode==2 ? "寻卡并读取 D1：00D1000000" : mode==4 ? "Q-Poll 寻卡：不发送 APDU" : "实机推图：请将电子屏贴稳，保持本页前台"));
         if(mode==3) pictures.result("等待发现屏幕 · 保持贴合");
@@ -236,7 +278,7 @@ public final class NfcTestActivity extends Activity {
                 else { s.event("capture_start",call(DiagnosticService.START)); String info=call(DiagnosticService.INFO); s.write("vendor-info.json",info); s.write("nfc-before.txt",call(DiagnosticService.SNAPSHOT)); }
             } catch(Throwable e) { s.event("capture_start_error",Log.getStackTraceString(e)); show("系统日志启动失败 "+e); }
             if(useQ){
-                try {if(active && epoch.get()==token){s.event("q_start",qStart());show("Q-Poll 已开始，贴稳电子屏，等待寻卡。第一次建议只读 D1。");}}
+                try {if(active && epoch.get()==token){String qStatus=qStart();s.event("q_start",qStatus);String selected=new JSONObject(qStatus).optString("controller_profile","unknown");s.event("controller_transport",selected);boolean unverified=new JSONObject(qStatus).optString("restore").equals("not_verifiable");if(unverified)s.event("rf_snapshot_unverified","manual opt-in enabled; verify NFC status after session");show("NFC 寻卡已开始（"+selected+"），贴稳电子屏。第一次建议只读 D1。"+(unverified?" RF 配置无法读回，结束后请核对 NFC 状态。":""));}}
                 catch(Throwable e){s.event("q_start_error",Log.getStackTraceString(e));show("Q-Poll 开启失败："+e);main.post(() -> stopSession("q_start_error"));}
             }else main.post(() -> { if(active && epoch.get()==token && mode!=0) enableReader(s,mode,frame,token); });
         });

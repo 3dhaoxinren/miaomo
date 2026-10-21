@@ -16,6 +16,9 @@ final class QPollBackend {
     private final Handler timer=new Handler(Looper.getMainLooper());
     private Object adapter,callback;
     private Class<?> adapterType;
+    private StVendorSession stSession;
+    private String controllerProfile="unselected";
+    private boolean stConfigured,stRestoreFailed;
     private Binder readerToken;
     private IBinder owner;
     private IBinder.DeathRecipient death;
@@ -23,6 +26,7 @@ final class QPollBackend {
     private volatile Tag tag;
     private volatile boolean running,qTouched,readerTouched,tagTaken;
     private volatile boolean qSent,qAccepted;
+    private volatile boolean rfSnapshotAvailable;
     private volatile String error="",before="",after="",restore="not_started";
     private volatile long generation;
     private volatile int timeout=3000,maxLength;
@@ -47,26 +51,59 @@ final class QPollBackend {
         }
         Collections.sort(rows);return rows.toString();
     }
+
+    private Object[] controllerInfo() throws Exception {
+        IBinder binder=(IBinder)Class.forName("android.os.ServiceManager").getMethod("getService",String.class).invoke(null,"mi_nfc");
+        if(binder==null)throw new IOException("mi_nfc service unavailable; no vendor command sent");
+        ClassLoader loader=new dalvik.system.PathClassLoader("/system_ext/framework/com.xiaomi.nfc.jar",ClassLoader.getSystemClassLoader());
+        Class<?> api=loader.loadClass("com.xiaomi.nfc.IMiNfcAdapter");
+        Object mi=loader.loadClass("com.xiaomi.nfc.IMiNfcAdapter$Stub").getMethod("asInterface",IBinder.class).invoke(null,binder);
+        String chip=String.valueOf(api.getMethod("getChipId").invoke(mi));
+        String firmware=String.valueOf(api.getMethod("getFwVersion").invoke(mi));int feature=-1;
+        try{Object version=api.getMethod("getFeatureVersion",String.class).invoke(mi,"NXP_MW");if(version instanceof Number)feature=((Number)version).intValue();}
+        catch(NoSuchMethodException|InvocationTargetException unsupported){event("nxp_profile_unavailable",unsupported.toString());}
+        event("controller_profile",chip+" / "+firmware+" / NXP_MW="+feature);
+        return new Object[]{chip,firmware,feature};
+    }
+    private Method readerMethod() throws Exception {
+        Class<?> callbackType=Class.forName("android.nfc.IAppCallback");
+        try{return adapterType.getMethod("setReaderMode",IBinder.class,callbackType,int.class,Bundle.class,String.class);}
+        catch(NoSuchMethodException older){return adapterType.getMethod("setReaderMode",IBinder.class,callbackType,int.class,Bundle.class);}
+    }
     private int qtag(int enabled) throws Exception {
         return ((Number)invoke("sendVendorNciMessage",new Class<?>[]{int.class,int.class,int.class,byte[].class},1,15,112,new byte[]{0x31,(byte)enabled})).intValue();
     }
     private void reader(int flags) throws Exception {
         Bundle extras=new Bundle();extras.putInt("presence",5000);
-        invoke("setReaderMode",new Class<?>[]{IBinder.class,Class.forName("android.nfc.IAppCallback"),int.class,Bundle.class,String.class},readerToken,callback,flags,extras,"com.android.shell");
+        Method method=readerMethod();
+        Object[] args=method.getParameterTypes().length==5?new Object[]{readerToken,callback,flags,extras,"com.android.shell"}:new Object[]{readerToken,callback,flags,extras};
+        try{method.invoke(adapter,args);}catch(InvocationTargetException e){Throwable failure=e.getTargetException();if(failure instanceof Exception)throw (Exception)failure;throw e;}
     }
-    synchronized String start(IBinder caller) throws Exception {
-        if(running || qTouched || readerTouched) throw new IllegalStateException("Q-Poll session already active; stop it first");
+    synchronized String start(IBinder caller,boolean allowUnverifiedSnapshot,boolean allowSt54l) throws Exception {
+        if(running || qTouched || readerTouched || stSession!=null || stRestoreFailed) throw new IllegalStateException("Q-Poll session already active; stop it first");
         if(caller==null)throw new IllegalArgumentException("Caller lifecycle binder is required");
         if(android.os.Process.myUid()!=2000) throw new SecurityException("Q-Poll requires Shizuku shell UID 2000");
-        tag=null;iso=null;tagTaken=false;qSent=false;qAccepted=false;error="";after="";restore="pending";
+        controllerProfile="unselected";stConfigured=false;tag=null;iso=null;tagTaken=false;qSent=false;qAccepted=false;rfSnapshotAvailable=false;before="";after="";error="";restore="pending";
         Object service=Class.forName("android.os.ServiceManager").getMethod("getService",String.class).invoke(null,"nfc");
         if(service==null) throw new IOException("NFC 服务不可用");
         adapterType=Class.forName("android.nfc.INfcAdapter");
         adapter=Class.forName("android.nfc.INfcAdapter$Stub").getMethod("asInterface",IBinder.class).invoke(null,service);
         if(((Number)invoke("getState",new Class<?>[0])).intValue()!=3) throw new IOException("请先打开系统 NFC 并解锁手机");
-        before=rfConfig();event("rf_before",before);
-        // Do not disable somebody else's Q polling when its owner is unknown.
-        if(before.contains("71:")) throw new IOException("已有 Q-Poll 寻卡会话，未接管或改动它");
+        Object[] controller=controllerInfo();
+        NfcControllerProfile.Kind profile=NfcControllerProfile.select((String)controller[0],(Integer)controller[2],allowSt54l);
+        readerMethod(); // Resolve the real 4/5 argument signature before any vendor write.
+        if(profile==NfcControllerProfile.Kind.ST54L_FRAMES){
+            controllerProfile="st54l_custom_frames";
+            before="st_pending";restore="pending";
+        }else{
+            controllerProfile="nxp_qtag";
+            QPollCompatibility.Mode compatibility=QPollCompatibility.inspect(adapterType,allowUnverifiedSnapshot,(Integer)controller[2]);
+            rfSnapshotAvailable=compatibility==QPollCompatibility.Mode.VERIFIED_RF_SNAPSHOT;
+            if(rfSnapshotAvailable){
+                before=rfConfig();event("rf_before",before);
+                if(before.contains("71:"))throw new IOException("已有 Q-Poll 寻卡会话，未接管或改动它");
+            }else{before="unavailable";after="unavailable";restore="not_verifiable";event("rf_snapshot_unavailable","explicit opt-in; NFC-idle acknowledged");}
+        }
         readerToken=new Binder();
         Class<?> cbType=Class.forName("android.nfc.IAppCallback"),stub=Class.forName("android.nfc.IAppCallback$Stub");
         Field field=stub.getDeclaredField("TRANSACTION_onTagDiscovered");field.setAccessible(true);discoveredCode=field.getInt(null);
@@ -94,8 +131,15 @@ final class QPollBackend {
         owner.linkToDeath(death,0);
         running=true;
         try {
-            qTouched=true;int result=qtag(1);event("qtag_on_api",String.valueOf(result));
-            if(result!=0) throw new IOException("系统拒绝 QTag，API="+result);
+            if(profile==NfcControllerProfile.Kind.ST54L_FRAMES){
+                stSession=new StVendorSession(adapter,adapterType,(String)controller[0],(String)controller[1],listener);
+                stSession.initialize();
+                byte[] original=stSession.start();stConfigured=true;before="st_frames:"+Protocol.hex(original);after="st_frames:"+Protocol.hex(Protocol.polling7A());
+                event("st_frames_verified",after+"; this confirms controller configuration, not tag activation or screen refresh");
+            }else{
+                qTouched=true;int result=qtag(1);event("qtag_on_api",String.valueOf(result));
+                if(result!=0)throw new IOException("系统拒绝 QTag，API="+result);
+            }
             readerTouched=true;reader(0x81);event("reader_on","shell UID 2000, flags=0x81");
             timer.postDelayed(() -> { if(generation==run && running && tag==null) stop("60s_no_tag"); },60000);
             timer.postDelayed(() -> { if(generation==run && running) stop("300s_hard_deadline"); },300000);
@@ -121,7 +165,7 @@ final class QPollBackend {
         if(line.contains("NxpNciR") && (packet.startsWith("6103") || packet.startsWith("6105")))event("rf_rx",packet);
     }
     String status() {
-        try {return new JSONObject().put("running",running).put("tag_ready",tag!=null).put("q_discovery_sent",qSent).put("q_discovery_accepted",qAccepted).put("error",error).put("rf_before",before).put("rf_after",after).put("restore",restore).toString();}
+        try {return new JSONObject().put("controller_profile",controllerProfile).put("st_frames_configured",stConfigured).put("running",running).put("tag_ready",tag!=null).put("q_discovery_sent",qSent).put("q_discovery_accepted",qAccepted).put("error",error).put("rf_before",before).put("rf_after",after).put("restore",restore).toString();}
         catch(JSONException e) {return "{}";}
     }
     String connect() throws Exception {
@@ -156,8 +200,16 @@ final class QPollBackend {
             try {int code=qtag(0);event("qtag_off_api",String.valueOf(code));if(code==0)qTouched=false;else error="QTag off API="+code;}
             catch(Exception e){error=e.toString();event("cleanup_error","qtag "+e);}
         }
+        if(stSession!=null){
+            try{
+                boolean owned=stSession.needsRecovery()||stConfigured;
+                stSession.restore();stConfigured=false;restore=owned?"st_frames_matched":"not_required";
+                byte[] original=stSession.baseline();if(original!=null)after="st_frames:"+Protocol.hex(original);
+                stSession.close();stSession=null;stRestoreFailed=false;event("st_frames_restored",restore);
+            }catch(Exception failed){stRestoreFailed=true;restore="st_restore_failed";error=failed.toString();event("cleanup_error","ST snapshot retained; do not start another session: "+failed);}
+        }
         if(owner!=null && death!=null) {owner.unlinkToDeath(death,0);owner=null;death=null;}
-        if(adapter!=null && !before.isEmpty()) {
+        if(controllerProfile.equals("nxp_qtag") && adapter!=null && rfSnapshotAvailable && !before.isEmpty()) {
             try {
                 after=rfConfig();
                 // Reader release is asynchronous in NfcService; verify its readback.
@@ -167,6 +219,11 @@ final class QPollBackend {
                 restore=after.equals(before) && !qTouched && !readerTouched ? "matched" : "not_matched";event("rf_restore",status());
             }
             catch(Exception e){restore="read_failed";event("cleanup_error","rf readback "+e);}
+        } else if(controllerProfile.equals("nxp_qtag") && adapter!=null && "unavailable".equals(before)) {
+            after="unavailable";restore="not_verifiable";
+            event("rf_restore_unavailable","reader-mode and QTag stop were attempted; RF configuration could not be read back");
+        } else if(!controllerProfile.equals("st54l_custom_frames") && adapter!=null && !qTouched && !readerTouched) {
+            after="not_changed";restore="not_required";
         }
         return status();
     }

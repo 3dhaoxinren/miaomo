@@ -1,45 +1,44 @@
 {
-  "app_version": "0.5.3-test",
+  "app_version": "0.5.5-test",
   "renderer": "Android native layout / Robolectric 4.16 / API 34",
-  "render_size": "400dp × 890dp at xhdpi; exported at 640px wide",
+  "render_size": "400dp x 890dp at xhdpi; exported at 640px wide",
   "sample": "Original procedural mountain illustration; no user photos",
-  "limitations": "Rendered application controls, not physical phone captures or NFC completion evidence",
+  "limitations": "Rendered application controls, not phone capture or NFC compatibility evidence",
   "images": {
     "home.png": {
       "width": 640,
       "height": 1424,
-      "sha256": "5e0436d008c480cf32b9ddc2dbd8605d3b029b05d7d7bc3e5218795878a0bc74"
+      "sha256": "6a408b2b16ff615888ece25361f86a183f867df007d20bb94ca0005d8d21395b"
     },
     "device.png": {
       "width": 640,
       "height": 1424,
-      "sha256": "26fec539b08f9b5e234d0a2e92394de4f1d90491b6e38dfff38c552e623efd8d"
+      "sha256": "01a8ed726d45c352edbcbc8f5ba9d3510da7c71d9cfb3741c289c49712509897"
     },
     "logs.png": {
       "width": 640,
       "height": 1424,
-      "sha256": "3b70c89645ec75e52c7922f5e9ffca775a99edd10e1c1dad75b931f2400adc35"
+      "sha256": "8f8e78d356d7374f3d25fde28536bf78cb8a8f9c3ad44f7f4e66fc2d9bd707d3"
     },
     "editor-crop.png": {
       "width": 640,
       "height": 1424,
-      "sha256": "0786f42aa59cfb2c07b2f5062399ebfe78b727e1774e9e9e2b90b5e087a558a2"
+      "sha256": "ff7fbf21a9ac5c0c6d2b1502c2eb779b2404ddb4752e728aa05fc8ecc5815bb5"
     },
     "editor-text.png": {
       "width": 640,
       "height": 1424,
-      "sha256": "5b799a3df4564613be08fe4db763b3aab2b54edd2c45ee3bfda1141886802de9"
+      "sha256": "dc93fe2af5938da7f2e2794fe1dec7832d0a4030648a33b3a924934438ee58df"
     },
     "editor-frame.png": {
       "width": 640,
       "height": 1424,
-      "sha256": "6f3681d4411d6a30a886ef3aa91ce003fb830aadf900b0dc2de526a606918e5c"
+      "sha256": "42f225ccddaced596e816efd8eb7b1be00d07887465de9b821b0f1920f34d266"
     },
     "text-style.png": {
       "width": 640,
       "height": 1005,
-      "sha256": "9f1895f28cce8f7c20d21fd8ed3ffb0c1adff970a0076408c7eb3a5ef8aaa5ac"
+      "sha256": "496f04196fbb565d322ff72767f75f98557aad8c31cab948696cfab01aef745c"
     }
-  },
-  "app_input_sha256": "3716ff4f2ebca912dd557bae8983e58212e7233abe4b370dfdbf1182ef63cf0b"
+  }
 }

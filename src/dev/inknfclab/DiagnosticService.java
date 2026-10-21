@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 public final class DiagnosticService extends Binder {
     static final String DESCRIPTOR = "dev.inknfclab.test.Diagnostics.v1";
     static final int INFO=1, START=2, DRAIN=3, STOP=4, SNAPSHOT=5;
-    static final int Q_START=6, Q_STATUS=7, Q_CONNECT=8, Q_TRANSCEIVE=9, Q_TIMEOUT=10, Q_STOP=11;
+    static final int Q_START=6, Q_STATUS=7, Q_CONNECT=8, Q_TRANSCEIVE=9, Q_TIMEOUT=10, Q_STOP=11, SERVICE_VERSION=12;
     private final ArrayDeque<String> lines = new ArrayDeque<>();
     private java.lang.Process logcat;
     private int buffered;
@@ -38,7 +38,8 @@ public final class DiagnosticService extends Binder {
                 case DRAIN: result=drain(); break;
                 case STOP: result=stop(); break;
                 case SNAPSHOT: result=command(new String[]{"/system/bin/dumpsys","nfc"}, 10000); break;
-                case Q_START: result=qpoll.start(data.readStrongBinder());break;
+                case SERVICE_VERSION: result="8";break;
+                case Q_START: result=qpoll.start(data.readStrongBinder(),data.readInt()!=0,data.readInt()!=0);break;
                 case Q_STATUS: result=qpoll.status();break;
                 case Q_CONNECT: result=qpoll.connect();break;
                 case Q_TIMEOUT: qpoll.timeout(data.readInt());result="TIMEOUT_SET";break;
@@ -67,8 +68,22 @@ public final class DiagnosticService extends Binder {
             o.put(name,value==null ? JSONObject.NULL : value);
         } catch(Throwable e) { try { o.put(name+"_error",e instanceof InvocationTargetException ? ((InvocationTargetException)e).getTargetException().toString() : e.toString()); } catch(Exception ignored) {} }
     }
+    private static JSONObject methodInventory(Class<?> api,String... names) throws Exception {
+        JSONObject inventory=new JSONObject();
+        for(String name:names) {
+            JSONArray signatures=new JSONArray();
+            for(java.lang.reflect.Method method:api.getMethods()) if(method.getName().equals(name)) {
+                StringBuilder value=new StringBuilder(method.getReturnType().getName()).append(' ').append(name).append('(');
+                Class<?>[] parameters=method.getParameterTypes();
+                for(int i=0;i<parameters.length;i++){if(i>0)value.append(',');value.append(parameters[i].getName());}
+                signatures.put(value.append(')').toString());
+            }
+            inventory.put(name,signatures);
+        }
+        return inventory;
+    }
     private String info() throws Exception {
-        JSONObject out=new JSONObject().put("uid",android.os.Process.myUid()).put("scope","read-only getters");
+        JSONObject out=new JSONObject().put("uid",android.os.Process.myUid()).put("scope","read-only getters").put("model",Build.MODEL).put("device",Build.DEVICE).put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("display",Build.DISPLAY);
         try {
             IBinder binder=(IBinder)service("mi_nfc");
             out.put("mi_descriptor",binder==null ? "null" : binder.getInterfaceDescriptor());
@@ -76,6 +91,7 @@ public final class DiagnosticService extends Binder {
                 ClassLoader loader=new PathClassLoader("/system_ext/framework/com.xiaomi.nfc.jar",ClassLoader.getSystemClassLoader());
                 Class<?> api=loader.loadClass("com.xiaomi.nfc.IMiNfcAdapter");
                 Object obj=loader.loadClass("com.xiaomi.nfc.IMiNfcAdapter$Stub").getMethod("asInterface",IBinder.class).invoke(null,binder);
+                out.put("mi_method_inventory",methodInventory(api,"getVersion","getChipId","getFwVersion","getDiscoveryTech","getCustomRFConfig","setDiscoveryTech","sendVendorNciMessage"));
                 for(String name:new String[]{"getVersion","getChipId","getFwVersion","getCustomRFConfig"}) getter(out,api,obj,name,new Class<?>[0]);
                 getter(out,api,obj,"getDiscoveryTech",new Class<?>[]{int.class},3);
                 getter(out,api,obj,"getFeatureVersion",new Class<?>[]{String.class},"NXP_MW");
@@ -85,6 +101,7 @@ public final class DiagnosticService extends Binder {
             IBinder binder=(IBinder)service("nfc");
             Class<?> api=Class.forName("android.nfc.INfcAdapter");
             Object obj=Class.forName("android.nfc.INfcAdapter$Stub").getMethod("asInterface",IBinder.class).invoke(null,binder);
+            out.put("nfc_method_inventory",methodInventory(api,"getState","getRfDiscoverConfigurations","sendVendorNciMessage","setReaderMode","updateDiscoveryTechnology","getNfcAdapterVendorInterface","registerVendorExtensionCallback","unregisterVendorExtensionCallback","pausePolling","resumePolling"));
             getter(out,api,obj,"getState",new Class<?>[0]);
             getter(out,api,obj,"getRfDiscoverConfigurations",new Class<?>[0]);
         } catch(Throwable e) { out.put("nfc_error",e.toString()); }
@@ -94,7 +111,7 @@ public final class DiagnosticService extends Binder {
     private String start() throws IOException {
         stop(); lines.clear(); buffered=0; dropped=0;
         ArrayList<String> args=new ArrayList<>(Arrays.asList("/system/bin/logcat","-v","threadtime","-T","1"));
-        for(String tag:new String[]{"NfcService","NfcTag","NfcDispatcher","NfcPhoneCase","NfcRFConfig","NfcAdaptation","NxpNci","NxpNciX","NxpNciR","NxpNciHal","NxpExtns","NxpTml","NxpHal","libnfc_nci","NFC","InkNfcTest"}) args.add(tag+":V");
+        for(String tag:new String[]{"NfcService","NfcTag","NfcDispatcher","NfcPhoneCase","NfcRFConfig","NfcAdaptation","NxpNci","NxpNciX","NxpNciR","NxpNciHal","NxpExtns","NxpTml","NxpHal","libnfc_nci","StNfcHal","StNfcNci","NfcStExtensions","NFC","InkNfcTest"}) args.add(tag+":V");
         args.add("*:S");
         final java.lang.Process current=new ProcessBuilder(args).redirectErrorStream(true).start(); logcat=current;
         final long token=++generation;

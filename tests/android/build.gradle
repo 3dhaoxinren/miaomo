@@ -4,9 +4,15 @@ configurations { androidAars }
 def sdk = System.getenv('ANDROID_SDK_ROOT') ?: System.getenv('ANDROID_HOME')
 if (!sdk) throw new GradleException('Set ANDROID_SDK_ROOT or ANDROID_HOME')
 def androidJar = file("${sdk}/platforms/android-35/android.jar")
+sourceSets.main.java.srcDirs = ['../../src']
+sourceSets.main.java.include 'dev/inknfclab/*.java'
+sourceSets.main.java.exclude 'dev/inknfclab/PicturePanel.java','dev/inknfclab/PhotoEditor.java','dev/inknfclab/DiagnosticService.java','dev/inknfclab/LogExportProvider.java'
 sourceSets.test.java.srcDirs = ['.']
 sourceSets.test.java.include '**/*Test.java'
 dependencies {
+    compileOnly files(androidJar)
+    implementation files('../../build/classes.jar')
+    implementation fileTree('../../deps') { include '*.jar' }
     testImplementation files('../../build/classes.jar')
     testImplementation fileTree('../../deps') { include '*.jar' }
     testCompileOnly files(androidJar)
