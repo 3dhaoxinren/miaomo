@@ -1,0 +1,6 @@
+odd_31x23_contain odd 17 11 31 23 contain
+odd_31x23_cover odd 17 11 31 23 cover
+ramp_19x23_contain ramp 63 47 19 23 contain
+ramp_19x23_cover ramp 63 47 19 23 cover
+ramp_552x768_cover ramp 63 47 552 768 cover
+panel_93x67_contain panel 552 768 93 67 contain

@@ -1,0 +1,57 @@
+{
+  "source": "assets/branding/miaomiao-icon-master.png",
+  "source_sha256": "ec269bcaa1ba18b65c50158f8735fe6223fe34ba8147b7e884681d4093cf40a9",
+  "source_unchanged": true,
+  "generator": "imagegen skill CLI via configured Sub2API relay",
+  "model": "gpt-image-2",
+  "prompt_file": "assets/branding/icon-prompt.txt",
+  "quality": "relay-selected; unsupported quality field omitted",
+  "cutout_method": "edge-connected peach background removal; generated source preserved",
+  "adaptive_foreground_scale": 0.66015625,
+  "files": {
+    "assets/branding/miaomiao-icon-master.png": {
+      "bytes": 1183847,
+      "sha256": "ec269bcaa1ba18b65c50158f8735fe6223fe34ba8147b7e884681d4093cf40a9"
+    },
+    "assets/branding/miaomiao-launcher-square.png": {
+      "bytes": 460933,
+      "sha256": "5bd1fd8d6ad8466204e5bd1a3e8ab3c4173e3cc7c2124179c737f8a820226768"
+    },
+    "assets/branding/miaomiao-squircle.png": {
+      "bytes": 229547,
+      "sha256": "0572d9b549458e1c833904d9437b576b94821f8e0221e1f94ae65374bad9c967"
+    },
+    "res/drawable-nodpi/miaomiao_foreground.png": {
+      "bytes": 379900,
+      "sha256": "b3b0cd5b63c8f6a0d3f8654c3c4841385d1f8bc16fb97727914ae17a22f71ae2"
+    },
+    "res/mipmap-anydpi-v26/ic_launcher.xml": {
+      "bytes": 229,
+      "sha256": "39807f1e488eb0e8efd594360dd87d5b10cc29ba62f2fa50e59ee1b962cd699c"
+    },
+    "res/mipmap-hdpi/ic_launcher.png": {
+      "bytes": 6215,
+      "sha256": "2039249f64df8cbc3453509441cb44708611ee21c055d5e9f073f8e6c310e119"
+    },
+    "res/mipmap-mdpi/ic_launcher.png": {
+      "bytes": 3179,
+      "sha256": "98c48b38e6c742eb6d599635f795fbe284c6a9bd06870d809bba4e44ef3f5645"
+    },
+    "res/mipmap-xhdpi/ic_launcher.png": {
+      "bytes": 10041,
+      "sha256": "e7925d9a53059384167888ea926f0fbaa8f82066b44097e165e895d27f576ec2"
+    },
+    "res/mipmap-xxhdpi/ic_launcher.png": {
+      "bytes": 19677,
+      "sha256": "ce28ad132739d282c3380dc6a0485d5a57c2102ee9f6590b0886c8461db10b86"
+    },
+    "res/mipmap-xxxhdpi/ic_launcher.png": {
+      "bytes": 31774,
+      "sha256": "8b79acd50d983d162e6e18661d08eaa76ca66491e3f261bd415bb5430bd318db"
+    },
+    "res/values/launcher_colors.xml": {
+      "bytes": 82,
+      "sha256": "b6890ebd1dfd0813c2a7c00be07778e786b9611f83d10d166850f3259b0c523b"
+    }
+  }
+}

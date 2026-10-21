@@ -1,0 +1,7 @@
+palette 4 1
+one 1 1
+column 1 13
+row 13 1
+odd 17 11
+ramp 63 47
+panel 552 768

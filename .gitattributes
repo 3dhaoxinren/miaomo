@@ -1,0 +1,9 @@
+* -text
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.png binary
+*.jar binary
+*.aar binary
+*.rgb binary
+*.codes binary

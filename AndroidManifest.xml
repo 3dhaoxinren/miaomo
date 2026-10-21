@@ -1,0 +1,18 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.inknfclab.test" android:versionCode="13" android:versionName="0.5.2-test">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <queries><package android:name="moe.shizuku.privileged.api" /></queries>
+    <application android:label="喵墨" android:theme="@style/AppTheme" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:allowBackup="false" android:debuggable="true" android:supportsRtl="true">
+        <meta-data android:name="moe.shizuku.client.V3_SUPPORT" android:value="true" />
+        <activity android:name="dev.inknfclab.NfcTestActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="dev.inknfclab.test.shizuku" android:multiprocess="false" android:enabled="true" android:exported="true" android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+        <provider android:name="dev.inknfclab.LogExportProvider" android:authorities="dev.inknfclab.test.logs" android:exported="false" android:grantUriPermissions="true" />
+    </application>
+</manifest>

@@ -1,0 +1,62 @@
+[
+  {
+    "path": "deps/aidl-13.1.5.aar",
+    "bytes": 23673,
+    "sha256": "33fe7191cdd69fcb66d649264f3b0c47acb2f3d6343afc05b98dbbff6f221963"
+  },
+  {
+    "path": "deps/aidl-13.1.5.jar",
+    "bytes": 25083,
+    "sha256": "584945c98f21b0c4e3ccdb74b51528f89852174c30bb2a4786c43a8ca456e496"
+  },
+  {
+    "path": "deps/aidl-13.1.5.pom",
+    "bytes": 1411,
+    "sha256": "068afe284102d3629562e6807423f6d1c8a4eb3dfa62fe241c7163633daaef3a"
+  },
+  {
+    "path": "deps/annotation-1.3.0.jar",
+    "bytes": 31705,
+    "sha256": "97dc45afefe3a1e421da42b8b6e9f90491477c45fc6178203e3a5e8a05ee8553"
+  },
+  {
+    "path": "deps/api-13.1.5.aar",
+    "bytes": 24652,
+    "sha256": "4def9bde498ef8626614c2fc5db9af4749c86f16f6c33e3f5658d35e70bab59b"
+  },
+  {
+    "path": "deps/api-13.1.5.jar",
+    "bytes": 25678,
+    "sha256": "4315fcd853f487321548be5a997749fe43105fa29aaaa6f6e7a8cdc958a38357"
+  },
+  {
+    "path": "deps/api-13.1.5.pom",
+    "bytes": 1987,
+    "sha256": "1e9d3b6f3a9b95580433f0486f3debb84c42f250e1fdc43a9fdcf121e14bd751"
+  },
+  {
+    "path": "deps/provider-13.1.5.aar",
+    "bytes": 7056,
+    "sha256": "b0f18cd9812464ec171c53cac93a819fe411718a3965c311f01eb4de265381b3"
+  },
+  {
+    "path": "deps/provider-13.1.5.jar",
+    "bytes": 6671,
+    "sha256": "35aee86b938cb8d06b315c9d73c30f41ec7cfdc10009a5de83733bc5c4db5051"
+  },
+  {
+    "path": "deps/provider-13.1.5.pom",
+    "bytes": 1819,
+    "sha256": "3413e9812ea3c3842212aa6eb04b8a785dfc25a2e114a972a0cead1ca003cd46"
+  },
+  {
+    "path": "deps/shared-13.1.5.aar",
+    "bytes": 2614,
+    "sha256": "4659642c9339be0a26e9c65bb8648f7ad6d8f4a465f557993ccbc78802381635"
+  },
+  {
+    "path": "deps/shared-13.1.5.jar",
+    "bytes": 2130,
+    "sha256": "8557b8c715d374f8da18e148ca5b971d1c7435e91447e6d4f7664403c7328760"
+  }
+]
