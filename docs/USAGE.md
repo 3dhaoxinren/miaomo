@@ -6,7 +6,7 @@
 
 需要 Android 8.0 以上手机、手机内置 NFC、运行中的 Shizuku，以及保留原 NFC 主控和线圈的华为 3.98 英寸四色墨水屏。Q-Poll 曾在小米 17 Pro Max / HyperOS 4 测试；**小米 15 Pro 尚无实机验证**。公开 `haotian` 设备树仅显示参考构建包含 ST NFC 扩展，不能确定用户手机当前栈或芯片；RF getter 兼容不代表 vendor command 已适配。
 
-1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.5.apk`。
+1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.6.apk`。
 2. 按 [Shizuku 官方指南](https://shizuku.rikka.app/zh-hans/guide/setup/) 启动 Shizuku。支持无线调试的系统可按指南配对启动，也可使用电脑 ADB 启动；这里不需要 root。
 3. 开启手机 NFC，打开喵墨。无需填写服务器地址或 API Key。照片处理在本地完成；检查更新时才读取 GitHub 公开发布信息。
 

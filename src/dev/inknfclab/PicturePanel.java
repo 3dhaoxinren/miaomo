@@ -57,7 +57,20 @@ final class PicturePanel {
     int powerWaitMs(){return activity.getSharedPreferences("refresh",0).getInt("power_wait_ms",5000);}
     void transfer(String message,int completed,int total){summary.setText(message+"\n"+completed+" / "+total+" 个数据包");boolean wait=total>0&&completed==total&&!message.equals("屏幕刷新完成");progress.setIndeterminate(wait);if(!wait)progress.setProgress(completed*90/Math.max(1,total));}
     void result(String message){progress.setIndeterminate(false);summary.setText(message);if(message.contains("设备报告空闲")||message.equals("屏幕刷新完成"))progress.setProgress(100);}
-    void failed(Throwable e){String detail=e.getMessage()==null?e.toString():e.getMessage();result(detail.contains("68CA")?"屏幕供电不足 · 68CA\n请检查供电与贴合位置，再手动重试。":"推送未完成\n"+detail);progress.setProgress(0);events.log("image_transfer_failed",detail);}
+    void failed(Throwable e){
+        String detail=e.getMessage()==null?e.toString():e.getMessage();
+        String message=detail.contains("68CA")?"屏幕供电不足 · 68CA\n请检查供电与贴合位置，再手动重试。":
+            tagLost(e)?"请对准 NFC 线圈\n连接已断开。请将手机背面的 NFC 感应区贴近屏幕线圈，调整位置后重试。刷新完成前，请保持贴合、不要移动。":
+            "推送未完成\n"+detail;
+        result(message);progress.setProgress(0);events.log("image_transfer_failed",android.util.Log.getStackTraceString(e));
+    }
+    private static boolean tagLost(Throwable error){
+        for(int depth=0;error!=null&&depth<8;depth++,error=error.getCause()){
+            String detail=error.getMessage();
+            if(error instanceof android.nfc.TagLostException||detail!=null&&(detail.contains("android.nfc.TagLostException")||detail.contains("Tag was lost")))return true;
+        }
+        return false;
+    }
     private void pick(){if(busy||preparing||editing)return;if(Build.VERSION.SDK_INT>=33)try{openPicker(new Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*"),"photo_picker");return;}catch(ActivityNotFoundException ignored){}try{openPicker(new Intent(Intent.ACTION_PICK,MediaStore.Images.Media.EXTERNAL_CONTENT_URI).setType("image/*"),"gallery");}catch(ActivityNotFoundException ignored){pickFile();}}
     private void pickFile(){if(busy||preparing||editing)return;try{openPicker(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*"),"document_picker");}catch(ActivityNotFoundException e){result("没有可用的图片选择器");}}
     private void openPicker(Intent intent,String kind){activity.startActivityForResult(intent,PICK);pendingSource=kind;events.log("image_picker_opened",kind+" / "+intent.getAction());}
