@@ -53,17 +53,9 @@ final class QPollBackend {
     }
 
     private Object[] controllerInfo() throws Exception {
-        IBinder binder=(IBinder)Class.forName("android.os.ServiceManager").getMethod("getService",String.class).invoke(null,"mi_nfc");
-        if(binder==null)throw new IOException("mi_nfc service unavailable; no vendor command sent");
-        ClassLoader loader=new dalvik.system.PathClassLoader("/system_ext/framework/com.xiaomi.nfc.jar",ClassLoader.getSystemClassLoader());
-        Class<?> api=loader.loadClass("com.xiaomi.nfc.IMiNfcAdapter");
-        Object mi=loader.loadClass("com.xiaomi.nfc.IMiNfcAdapter$Stub").getMethod("asInterface",IBinder.class).invoke(null,binder);
-        String chip=String.valueOf(api.getMethod("getChipId").invoke(mi));
-        String firmware=String.valueOf(api.getMethod("getFwVersion").invoke(mi));int feature=-1;
-        try{Object version=api.getMethod("getFeatureVersion",String.class).invoke(mi,"NXP_MW");if(version instanceof Number)feature=((Number)version).intValue();}
-        catch(NoSuchMethodException|InvocationTargetException unsupported){event("nxp_profile_unavailable",unsupported.toString());}
-        event("controller_profile",chip+" / "+firmware+" / NXP_MW="+feature);
-        return new Object[]{chip,firmware,feature};
+        NfcControllerProbe.Info info=NfcControllerProbe.inspect(adapter,adapterType);
+        event("controller_profile",info.json().toString());
+        return new Object[]{info.chip,info.firmware,info.nxpFeature};
     }
     private Method readerMethod() throws Exception {
         Class<?> callbackType=Class.forName("android.nfc.IAppCallback");

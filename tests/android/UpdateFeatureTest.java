@@ -32,7 +32,7 @@ import static org.junit.Assert.*;
 public class UpdateFeatureTest {
     interface IAppCallback {}
     interface QSnapshot {
-        int getState();Object getRfDiscoverConfigurations();int sendVendorNciMessage(int a,int b,int c,byte[] d);
+        int getState();java.util.List<?> getRfDiscoverConfigurations();int sendVendorNciMessage(int a,int b,int c,byte[] d);
         void setReaderMode(android.os.IBinder token,IAppCallback callback,int flags,android.os.Bundle extras,String packageName);
     }
     interface QNoSnapshot {
@@ -40,7 +40,7 @@ public class UpdateFeatureTest {
         void setReaderMode(android.os.IBinder token,IAppCallback callback,int flags,android.os.Bundle extras,String packageName);
     }
     interface QNoRaw {
-        int getState();Object getRfDiscoverConfigurations();
+        int getState();java.util.List<?> getRfDiscoverConfigurations();
         void setReaderMode(android.os.IBinder token,IAppCallback callback,int flags,android.os.Bundle extras,String packageName);
     }
     ActivityController<Activity> controller;
@@ -49,7 +49,7 @@ public class UpdateFeatureTest {
     @Before public void setup()throws Exception{
         Activity app=Robolectric.buildActivity(Activity.class).get();
         PackageInfo info=app.getPackageManager().getPackageInfo(app.getPackageName(),0);
-        info.versionName="0.5.5-test";info.versionCode=16;Shadows.shadowOf(app.getPackageManager()).installPackage(info);
+        info.versionName="0.5.7-test";info.versionCode=18;Shadows.shadowOf(app.getPackageManager()).installPackage(info);
         controller=Robolectric.buildActivity(Activity.class);activity=controller.get();activity.setTheme(android.R.style.Theme_Material_Light_NoActionBar);controller.setup();
         activity.getSharedPreferences("app_updates",0).edit().clear().commit();
     }
@@ -84,13 +84,13 @@ public class UpdateFeatureTest {
         ShadowLooper.idleMainLooper();assertTrue("request finished",check.isEnabled());
     }
     @Test public void manualFindsNewerAndOpensOfficialAsset()throws Exception{
-        String data=body("v0.5.6-test");AtomicInteger requests=new AtomicInteger();
+        String data=body("v0.5.8-test");AtomicInteger requests=new AtomicInteger();
         panel(()->{requests.incrementAndGet();return data;},new AtomicBoolean());
         assertEquals(0,requests.get());Button check=button(panel.view,"检查更新");assertNotNull(check);check.performClick();await(check);
         assertEquals(1,requests.get());AlertDialog dialog=(AlertDialog)ShadowDialog.getLatestDialog();assertNotNull(dialog);
-        assertTrue(contains(dialog.getWindow().getDecorView(),"发现新版本 v0.5.6-test"));
+        assertTrue(contains(dialog.getWindow().getDecorView(),"发现新版本 v0.5.8-test"));
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick();ShadowLooper.idleMainLooper();Intent intent=Shadows.shadowOf(activity).getNextStartedActivity();
-        assertEquals(GitHubUpdates.REPOSITORY+"/releases/download/v0.5.6-test/miaomo-0.5.6.apk",intent.getDataString());
+        assertEquals(GitHubUpdates.REPOSITORY+"/releases/download/v0.5.8-test/miaomo-0.5.8.apk",intent.getDataString());
     }
     @Test public void sameOrOlderDoesNotOfferDowngrade()throws Exception{
         String data=body("v0.5.2-test");panel(()->data,new AtomicBoolean());Button check=button(panel.view,"检查更新");check.performClick();await(check);
@@ -101,7 +101,7 @@ public class UpdateFeatureTest {
         assertTrue(contains(panel.view,"检查失败"));assertTrue(contains(ShadowDialog.getLatestDialog().getWindow().getDecorView(),"GitHub 暂时限制请求"));
     }
     @Test public void backgroundCompletionDoesNotOpenDialog()throws Exception{
-        CountDownLatch started=new CountDownLatch(1),release=new CountDownLatch(1);String data=body("v0.5.6-test");
+        CountDownLatch started=new CountDownLatch(1),release=new CountDownLatch(1);String data=body("v0.5.8-test");
         panel(()->{started.countDown();release.await(2,TimeUnit.SECONDS);return data;},new AtomicBoolean());Button check=button(panel.view,"检查更新");check.performClick();assertTrue(started.await(1,TimeUnit.SECONDS));panel.foreground(false);release.countDown();await(check);
         assertNull(ShadowDialog.getLatestDialog());assertNotNull(button(panel.view,"查看新版本"));
     }
@@ -110,7 +110,7 @@ public class UpdateFeatureTest {
         assertEquals(0,requests.get());assertNull(Shadows.shadowOf(activity).getNextStartedActivity());
     }
     @Test public void automaticIsOptInAndThrottled()throws Exception{
-        AtomicInteger requests=new AtomicInteger();String data=body("v0.5.5-test");panel(()->{requests.incrementAndGet();return data;},new AtomicBoolean());assertEquals(0,requests.get());
+        AtomicInteger requests=new AtomicInteger();String data=body("v0.5.7-test");panel(()->{requests.incrementAndGet();return data;},new AtomicBoolean());assertEquals(0,requests.get());
         activity.getSharedPreferences("app_updates",0).edit().putBoolean("automatic",true).commit();panel.foreground(true);Button check=button(panel.view,"检查更新");await(check);assertEquals(1,requests.get());panel.foreground(false);panel.foreground(true);ShadowLooper.idleMainLooper();assertEquals(1,requests.get());
         assertFalse(UpdatePanel.due(false,100,0));assertFalse(UpdatePanel.due(true,1000,999));assertTrue(UpdatePanel.due(true,UpdatePanel.CHECK_INTERVAL+100,100));assertTrue(UpdatePanel.due(true,99,100));
     }
@@ -118,16 +118,16 @@ public class UpdateFeatureTest {
         CountDownLatch started=new CountDownLatch(1);panel(()->{started.countDown();Thread.sleep(3000);return "[]";},new AtomicBoolean());button(panel.view,"检查更新").performClick();assertTrue(started.await(1,TimeUnit.SECONDS));panel.close();Thread.sleep(50);ShadowLooper.idleMainLooper();assertNull(ShadowDialog.getLatestDialog());
     }
     @Test public void parsesRealJsonAndRejectsUnsafeAsset()throws Exception{
-        JSONObject bad=release("v0.5.6-test",false,true,true);bad.getJSONArray("assets").getJSONObject(0).put("browser_download_url","https://evil.test/miaomo.apk");
+        JSONObject bad=release("v0.5.8-test",false,true,true);bad.getJSONArray("assets").getJSONObject(0).put("browser_download_url","https://evil.test/miaomo.apk");
         JSONArray list=new JSONArray().put(release("v99.0.0",true,false,true)).put(bad).put(release("v0.5.2-test",false,true,true));
-        GitHubUpdates.Result result=GitHubUpdates.check("0.5.5-test",true,list::toString);assertTrue(result.updateAvailable);assertEquals("v0.5.6-test",result.latest.tag);assertNull(result.latest.downloadUrl);assertEquals(GitHubUpdates.REPOSITORY+"/releases/tag/v0.5.6-test",result.latest.page());
+        GitHubUpdates.Result result=GitHubUpdates.check("0.5.7-test",true,list::toString);assertTrue(result.updateAvailable);assertEquals("v0.5.8-test",result.latest.tag);assertNull(result.latest.downloadUrl);assertEquals(GitHubUpdates.REPOSITORY+"/releases/tag/v0.5.8-test",result.latest.page());
         GitHubUpdates.Result stable=GitHubUpdates.check("0.5.2",false,list::toString);assertNull(stable.latest);
         assertTrue(GitHubUpdates.parse("[]").isEmpty());assertTrue(GitHubUpdates.parse("[null,{}]").isEmpty());
         try{GitHubUpdates.parse("{bad json}");fail();}catch(org.json.JSONException expected){}
     }
     @Test public void activityContainsUpdateEntry()throws Exception{
         ActivityController<NfcTestActivity> app=Robolectric.buildActivity(NfcTestActivity.class);app.get().setTheme(android.R.style.Theme_Material_Light_NoActionBar);app.setup();
-        assertNotNull(button(app.get().getWindow().getDecorView(),"检查更新"));assertTrue(contains(app.get().getWindow().getDecorView(),"当前版本 0.5.5-test"));app.pause().stop().destroy();
+        assertNotNull(button(app.get().getWindow().getDecorView(),"检查更新"));assertTrue(contains(app.get().getWindow().getDecorView(),"当前版本 0.5.7-test"));app.pause().stop().destroy();
     }
     @Test public void appShowsExplicitOptInForUnverifiedRfCompatibility()throws Exception{
         ActivityController<NfcTestActivity> app=Robolectric.buildActivity(NfcTestActivity.class);app.get().setTheme(android.R.style.Theme_Material_Light_NoActionBar);app.setup();

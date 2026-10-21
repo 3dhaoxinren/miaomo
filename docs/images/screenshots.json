@@ -1,5 +1,5 @@
 {
-  "app_version": "0.5.5-test",
+  "app_version": "0.5.7-test",
   "renderer": "Android native layout / Robolectric 4.16 / API 34",
   "render_size": "400dp x 890dp at xhdpi; exported at 640px wide",
   "sample": "Original procedural mountain illustration; no user photos",
@@ -13,12 +13,12 @@
     "device.png": {
       "width": 640,
       "height": 1424,
-      "sha256": "01a8ed726d45c352edbcbc8f5ba9d3510da7c71d9cfb3741c289c49712509897"
+      "sha256": "445f1c11450be32aace910d83f4a220a466ba74fe9582dd06a633c92a0f60861"
     },
     "logs.png": {
       "width": 640,
       "height": 1424,
-      "sha256": "8f8e78d356d7374f3d25fde28536bf78cb8a8f9c3ad44f7f4e66fc2d9bd707d3"
+      "sha256": "917341d9c2be2ca8fb7d16af6709d68c6beb3d58a85fd1311e74a01bb7e51560"
     },
     "editor-crop.png": {
       "width": 640,

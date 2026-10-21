@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 public final class DiagnosticService extends Binder {
     static final String DESCRIPTOR = "dev.inknfclab.test.Diagnostics.v1";
     static final int INFO=1, START=2, DRAIN=3, STOP=4, SNAPSHOT=5;
-    static final int Q_START=6, Q_STATUS=7, Q_CONNECT=8, Q_TRANSCEIVE=9, Q_TIMEOUT=10, Q_STOP=11, SERVICE_VERSION=12;
+    static final int Q_START=6, Q_STATUS=7, Q_CONNECT=8, Q_TRANSCEIVE=9, Q_TIMEOUT=10, Q_STOP=11, SERVICE_VERSION=12, CAPABILITIES=13;
     private final ArrayDeque<String> lines = new ArrayDeque<>();
     private java.lang.Process logcat;
     private int buffered;
@@ -38,7 +38,8 @@ public final class DiagnosticService extends Binder {
                 case DRAIN: result=drain(); break;
                 case STOP: result=stop(); break;
                 case SNAPSHOT: result=command(new String[]{"/system/bin/dumpsys","nfc"}, 10000); break;
-                case SERVICE_VERSION: result="8";break;
+                case SERVICE_VERSION: result="9";break;
+                case CAPABILITIES: result=NfcControllerProbe.capabilities(data.readInt()!=0,data.readInt()!=0).toString();break;
                 case Q_START: result=qpoll.start(data.readStrongBinder(),data.readInt()!=0,data.readInt()!=0);break;
                 case Q_STATUS: result=qpoll.status();break;
                 case Q_CONNECT: result=qpoll.connect();break;
@@ -83,12 +84,12 @@ public final class DiagnosticService extends Binder {
         return inventory;
     }
     private String info() throws Exception {
-        JSONObject out=new JSONObject().put("uid",android.os.Process.myUid()).put("scope","read-only getters").put("model",Build.MODEL).put("device",Build.DEVICE).put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("display",Build.DISPLAY);
+        JSONObject out=new JSONObject().put("uid",android.os.Process.myUid()).put("scope","read-only getters").put("manufacturer",Build.MANUFACTURER).put("model",Build.MODEL).put("device",Build.DEVICE).put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("display",Build.DISPLAY).put("diagnostic_service_version","9");
         try {
             IBinder binder=(IBinder)service("mi_nfc");
             out.put("mi_descriptor",binder==null ? "null" : binder.getInterfaceDescriptor());
             if(binder!=null) {
-                ClassLoader loader=new PathClassLoader("/system_ext/framework/com.xiaomi.nfc.jar",ClassLoader.getSystemClassLoader());
+                ClassLoader loader=NfcControllerProbe.xiaomiLoader();
                 Class<?> api=loader.loadClass("com.xiaomi.nfc.IMiNfcAdapter");
                 Object obj=loader.loadClass("com.xiaomi.nfc.IMiNfcAdapter$Stub").getMethod("asInterface",IBinder.class).invoke(null,binder);
                 out.put("mi_method_inventory",methodInventory(api,"getVersion","getChipId","getFwVersion","getDiscoveryTech","getCustomRFConfig","setDiscoveryTech","sendVendorNciMessage"));
@@ -101,6 +102,7 @@ public final class DiagnosticService extends Binder {
             IBinder binder=(IBinder)service("nfc");
             Class<?> api=Class.forName("android.nfc.INfcAdapter");
             Object obj=Class.forName("android.nfc.INfcAdapter$Stub").getMethod("asInterface",IBinder.class).invoke(null,binder);
+            out.put("controller",NfcControllerProbe.inspect(obj,api).json());
             out.put("nfc_method_inventory",methodInventory(api,"getState","getRfDiscoverConfigurations","sendVendorNciMessage","setReaderMode","updateDiscoveryTechnology","getNfcAdapterVendorInterface","registerVendorExtensionCallback","unregisterVendorExtensionCallback","pausePolling","resumePolling"));
             getter(out,api,obj,"getState",new Class<?>[0]);
             getter(out,api,obj,"getRfDiscoverConfigurations",new Class<?>[0]);

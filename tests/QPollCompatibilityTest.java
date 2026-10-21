@@ -8,7 +8,7 @@ public final class QPollCompatibilityTest {
     interface IAppCallback {}
     interface SnapshotApi {
         int getState();
-        Object getRfDiscoverConfigurations();
+        java.util.List<?> getRfDiscoverConfigurations();
         int sendVendorNciMessage(int gid,int oid,int length,byte[] payload);
         void setReaderMode(IBinder token,IAppCallback callback,int flags,Bundle extras,String packageName);
     }
@@ -19,12 +19,12 @@ public final class QPollCompatibilityTest {
     }
     interface NoRawSendApi {
         int getState();
-        Object getRfDiscoverConfigurations();
+        java.util.List<?> getRfDiscoverConfigurations();
         void setReaderMode(IBinder token,IAppCallback callback,int flags,Bundle extras,String packageName);
     }
     interface NoReaderApi {
         int getState();
-        Object getRfDiscoverConfigurations();
+        java.util.List<?> getRfDiscoverConfigurations();
         int sendVendorNciMessage(int gid,int oid,int length,byte[] payload);
     }
     interface WrongReaderModeSignature {
@@ -40,9 +40,9 @@ public final class QPollCompatibilityTest {
     }
     public static void main(String[] args)throws Exception{
         require(QPollCompatibility.inspect(SnapshotApi.class,false,16)==QPollCompatibility.Mode.VERIFIED_RF_SNAPSHOT);
-        rejects(NoSnapshotApi.class,false,16,"opt in");
+        rejects(NoSnapshotApi.class,false,16,"缺少 RF");
         require(QPollCompatibility.inspect(NoSnapshotApi.class,true,16)==QPollCompatibility.Mode.USER_OPTED_IN_NO_RF_SNAPSHOT);
-        rejects(NoSnapshotApi.class,true,-1,"NXP_MW feature version");
+        rejects(NoSnapshotApi.class,true,-1,"NXP_MW");
         rejects(NoRawSendApi.class,true,16,"vendor NCI");
         rejects(NoReaderApi.class,true,16,"reader-mode");
         rejects(WrongReaderModeSignature.class,true,16,"reader-mode");
