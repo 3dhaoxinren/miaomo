@@ -29,6 +29,11 @@ jobs:
         run: python test_images.py
       - name: Build and verify APK
         run: python build.py
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Android update feature tests
+        run: gradle -p tests/android --no-daemon --console=plain test
       - uses: actions/upload-artifact@v4
         with:
           name: miaomo-debug-apk

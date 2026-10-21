@@ -1,0 +1,45 @@
+plugins { id 'java' }
+repositories { mavenCentral(); google(); maven { url 'https://maven.aliyun.com/repository/google' } }
+configurations { androidAars }
+def sdk = System.getenv('ANDROID_SDK_ROOT') ?: System.getenv('ANDROID_HOME')
+if (!sdk) throw new GradleException('Set ANDROID_SDK_ROOT or ANDROID_HOME')
+def androidJar = file("${sdk}/platforms/android-35/android.jar")
+sourceSets.test.java.srcDirs = ['.']
+sourceSets.test.java.include '**/*Test.java'
+dependencies {
+    testImplementation files('../../build/classes.jar')
+    testImplementation fileTree('../../deps') { include '*.jar' }
+    testCompileOnly files(androidJar)
+    testRuntimeOnly files(androidJar)
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation('org.robolectric:robolectric:4.16') {
+        exclude group: 'androidx.test', module: 'monitor'
+        exclude group: 'androidx.test.espresso', module: 'espresso-idling-resource'
+        exclude group: 'org.robolectric', module: 'nativeruntime-dist-compat'
+    }
+    androidAars 'androidx.test:monitor:1.8.0@aar'
+    androidAars 'androidx.test.espresso:espresso-idling-resource:3.7.0@aar'
+    testRuntimeOnly fileTree(layout.buildDirectory.dir('aar-jars')) { include '*.jar' }
+}
+tasks.register('unpackAndroidAars') {
+    doLast {
+        configurations.androidAars.files.each { aar ->
+            copy {
+                from zipTree(aar); include 'classes.jar'
+                into layout.buildDirectory.dir('aar-jars')
+                rename 'classes.jar', aar.name.replace('.aar','.jar')
+            }
+        }
+    }
+}
+tasks.named('test') {
+    dependsOn 'unpackAndroidAars'
+    maxHeapSize = '2g'
+    systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+    if (System.getenv('MIAOMO_ROBOLECTRIC_SDK')) {
+        systemProperty 'robolectric.offline', 'true'
+        systemProperty 'robolectric.dependency.dir', System.getenv('MIAOMO_ROBOLECTRIC_SDK')
+    }
+    systemProperty 'file.encoding', 'UTF-8'
+    testLogging { events 'passed','failed'; showStandardStreams = true; exceptionFormat = 'full' }
+}

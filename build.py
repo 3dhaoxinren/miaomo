@@ -40,11 +40,13 @@ run([sdktool('d8'),'--min-api','26','--lib',ANDROID,'--output',OUT/'dex',OUT/'cl
 with zipfile.ZipFile(OUT/'unsigned.apk','a',zipfile.ZIP_DEFLATED) as z:
     for f in (OUT/'dex').glob('*.dex'): z.write(f,f.name)
 run([sdktool('zipalign'),'-f','4',OUT/'unsigned.apk',OUT/'aligned.apk'])
-if not (OUT/'debug.keystore').exists():
-    run([javatool('keytool'),'-genkeypair','-keystore',OUT/'debug.keystore','-storepass','android','-keypass','android','-alias','androiddebugkey','-keyalg','RSA','-keysize','2048','-validity','3650','-dname','CN=Ink NFC Diagnostic Test'])
+KEYSTORE=pathlib.Path(os.environ.get('MIAOMO_KEYSTORE',str(OUT/'debug.keystore')))
+if not KEYSTORE.exists():
+    if os.environ.get('MIAOMO_KEYSTORE'): raise SystemExit('Configured MIAOMO_KEYSTORE does not exist')
+    run([javatool('keytool'),'-genkeypair','-keystore',KEYSTORE,'-storepass','android','-keypass','android','-alias','androiddebugkey','-keyalg','RSA','-keysize','2048','-validity','3650','-dname','CN=Ink NFC Diagnostic Test'])
 version=ET.parse(ROOT/'AndroidManifest.xml').getroot().attrib['{http://schemas.android.com/apk/res/android}versionName'].split('-')[0]
 APK=OUT/('miaomo-'+version+'.apk')
-run([sdktool('apksigner'),'sign','--ks',OUT/'debug.keystore','--ks-pass','pass:android','--out',APK,OUT/'aligned.apk'])
+run([sdktool('apksigner'),'sign','--ks',KEYSTORE,'--ks-pass','pass:android','--out',APK,OUT/'aligned.apk'])
 run([sdktool('apksigner'),'verify','--verbose','--print-certs',APK])
 run([sdktool('aapt2'),'dump','badging',APK])
 print('APK='+str(APK)); print('SHA256='+hashlib.sha256(APK.read_bytes()).hexdigest())

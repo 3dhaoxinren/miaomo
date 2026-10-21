@@ -40,6 +40,7 @@ public final class NfcTestActivity extends Activity {
     private boolean binding, smokeRequested, smokeDone, stopping;
     private int diagnosticTestMode=-1;
     private PicturePanel pictures;
+    private UpdatePanel updates;
     private int marker;
     private NfcAdapter adapter;
     private TextView state, output, sessionLabel;
@@ -88,7 +89,8 @@ public final class NfcTestActivity extends Activity {
         AppUi.title(pages[1],"连接你的墨水屏","一次连接，随后即可从照片页推送。");
         LinearLayout device=AppUi.card(this);device.addView(AppUi.text(this,"华为 3.98 英寸四色屏",19,AppUi.INK,true));AppUi.gap(device,8);device.addView(AppUi.text(this,"552 × 768  ·  内置 NFC",13,AppUi.MUTED,false));AppUi.gap(device,20);state=AppUi.text(this,"",14,AppUi.INK,false);device.addView(state);AppUi.gap(device,20);device.addView(AppUi.button(this,"连接 NFC 服务",true,this::connectShizuku));AppUi.gap(device,8);device.addView(AppUi.button(this,"检测屏幕",false,()->begin(2)));pages[1].addView(device);AppUi.gap(pages[1],16);
         LinearLayout settings=AppUi.card(this);settings.addView(AppUi.text(this,"推送设置",17,AppUi.INK,true));AppUi.gap(settings,10);settings.addView(AppUi.text(this,"刷新上电等待",13,AppUi.INK,false));Spinner wait=new Spinner(this);wait.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"1 秒","2 秒","3 秒","5 秒"}));int[] times={1000,2000,3000,5000};int at=3;for(int i=0;i<4;i++)if(times[i]==getSharedPreferences("refresh",0).getInt("power_wait_ms",5000))at=i;wait.setSelection(at);settings.addView(wait);wait.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> a,View v,int i,long id){getSharedPreferences("refresh",0).edit().putInt("power_wait_ms",times[i]).apply();}public void onNothingSelected(AdapterView<?> a){}});settings.addView(AppUi.text(this,"照片上传与刷新期间，请保持稳定供电和 NFC 贴合。",12,AppUi.MUTED,false));pages[1].addView(settings);AppUi.gap(pages[1],16);
-        LinearLayout advanced=AppUi.column(this);advanced.setVisibility(View.GONE);pages[1].addView(AppUi.button(this,"高级诊断",false,()->advanced.setVisibility(advanced.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE)));AppUi.gap(pages[1],10);pages[1].addView(advanced);button(advanced,"Q-Poll 寻卡（不发送屏幕命令）",()->begin(4));button(advanced,"普通 NFC 寻卡对照",()->begin(1));button(advanced,"读取厂商诊断信息",this::diagnostics);button(advanced,"仅采集 NFC 日志",()->begin(0));button(advanced,"生成验证用测试图",pictures::prepareDemo);AppUi.gap(pages[1],16);pages[1].addView(AppUi.text(this,"喵墨 0.5.2  /  InkSight 图片处理\nShizuku 通过系统调试服务运行，无需 root。",11,AppUi.MUTED,false));
+        updates=new UpdatePanel(this,()->active);pages[1].addView(updates.view);AppUi.gap(pages[1],14);
+        LinearLayout advanced=AppUi.column(this);advanced.setVisibility(View.GONE);pages[1].addView(AppUi.button(this,"高级诊断",false,()->advanced.setVisibility(advanced.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE)));AppUi.gap(pages[1],10);pages[1].addView(advanced);button(advanced,"Q-Poll 寻卡（不发送屏幕命令）",()->begin(4));button(advanced,"普通 NFC 寻卡对照",()->begin(1));button(advanced,"读取厂商诊断信息",this::diagnostics);button(advanced,"仅采集 NFC 日志",()->begin(0));button(advanced,"生成验证用测试图",pictures::prepareDemo);AppUi.gap(pages[1],16);pages[1].addView(AppUi.text(this,"喵墨 "+AppVersion.name(this)+"  /  InkSight 图片处理\nShizuku 通过系统调试服务运行，无需 root。",11,AppUi.MUTED,false));
         AppUi.title(pages[2],"日志与记录","每次推送自动保存，遇到问题可导出调试。");
         LinearLayout logActions=AppUi.card(this);row(logActions,"分享日志",()->export(false),"保存日志",()->export(true));AppUi.gap(logActions,8);button(logActions,"历史会话",this::history);AppUi.gap(logActions,8);button(logActions,"停止并保存当前会话",()->stopSession("user_stop"));AppUi.gap(logActions,8);button(logActions,"添加复现标记",()->{SessionLog current=session;if(current!=null){String mark="MARK_"+(++marker);current.event("user_marker",mark);show("已添加标记 "+mark);}});pages[2].addView(logActions);AppUi.gap(pages[2],18);
         sessionLabel=AppUi.label(this,"");pages[2].addView(sessionLabel);AppUi.gap(pages[2],12);output=AppUi.text(this,"准备就绪\n",12,AppUi.INK,false);output.setTypeface(android.graphics.Typeface.MONOSPACE);output.setTextIsSelectable(true);LinearLayout console=AppUi.card(this);console.addView(output);pages[2].addView(console);AppUi.gap(pages[2],10);pages[2].addView(AppUi.text(this,"日志只存本机，导出的 ZIP 可能包含所选照片、屏幕标识和通信数据。",11,AppUi.MUTED,false));
@@ -429,11 +431,11 @@ public final class NfcTestActivity extends Activity {
         diagnosticTestMode=-1;begin(mode);
     }
     @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); if(intent.getBooleanExtra("smoke_test",false)) { smokeRequested=true; smokeDone=false; if(remote!=null) runSmoke(); else connectShizuku(); } diagnosticTestMode=intent.getIntExtra("diagnostic_mode",-1); if(diagnosticTestMode>=0){if(remote!=null)runDiagnosticIntent();else connectShizuku();} }
-    @Override protected void onResume() { super.onResume(); resumed=true; refresh(); runDiagnosticIntent(); }
-    @Override protected void onPause() { resumed=false; stopSession("activity_background"); super.onPause(); }
+    @Override protected void onResume() { super.onResume(); resumed=true; refresh(); runDiagnosticIntent(); if(updates!=null)updates.foreground(true); }
+    @Override protected void onPause() { resumed=false; if(updates!=null)updates.foreground(false); stopSession("activity_background"); super.onPause(); }
     @Override protected void onDestroy() {
         destroyed=true; main.removeCallbacksAndMessages(null); stopSession("destroy");
-        pictures.close(); nfcWork.shutdown();
+        if(updates!=null)updates.close(); pictures.close(); nfcWork.shutdown();
         Shizuku.removeBinderReceivedListener(received); Shizuku.removeBinderDeadListener(dead); Shizuku.removeRequestPermissionResultListener(permission);
         work.execute(() -> { try { if(remote!=null || binding) Shizuku.unbindUserService(serviceArgs,serviceConnection,true); } catch(Throwable ignored) {} remote=null; });
         work.shutdown(); super.onDestroy();

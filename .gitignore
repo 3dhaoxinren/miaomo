@@ -1,4 +1,6 @@
 /build/
+/tests/android/build/
+/tests/android/.gradle/
 /release/
 /transaction/
 /verification/

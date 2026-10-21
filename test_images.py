@@ -10,7 +10,7 @@ def run(args):
     e=dict(command=command,stdin='',stdout=p.stdout.decode('utf-8','replace'),stderr=p.stderr.decode('utf-8','replace'),exit_status=p.returncode,stdout_base64=base64.b64encode(p.stdout).decode(),stderr_base64=base64.b64encode(p.stderr).decode())
     events.append(e); ledger.write_text(json.dumps(events,ensure_ascii=False,indent=2),encoding='utf-8'); print(json.dumps(e,ensure_ascii=False)); assert p.returncode==0
 src=ROOT/'src/dev/inknfclab'
-names=['Protocol','ImageCodec','ImageQuantizer','ExperimentalQuantizer','AlgorithmCatalog','ResearchQuantizer','ImageTransfer','NciDiscovery','BlockQuantizer','InkSightQuantizer','InkSightFitter','PhotoEdit','PhotoDecorations','EditHistory','AppUi']
-tests=['ProtocolTest','ImageCodecTest','ImageTransferTest','FullTransferTest','NciDiscoveryTest','InkSightQuantizerTest','PhotoEditTest','EditSceneTest']
+names=['Protocol','ImageCodec','ImageQuantizer','ExperimentalQuantizer','AlgorithmCatalog','ResearchQuantizer','ImageTransfer','NciDiscovery','BlockQuantizer','InkSightQuantizer','InkSightFitter','PhotoEdit','PhotoDecorations','EditHistory','AppUi','UpdateVersion','GitHubUpdates']
+tests=['ProtocolTest','ImageCodecTest','ImageTransferTest','FullTransferTest','NciDiscoveryTest','InkSightQuantizerTest','PhotoEditTest','EditSceneTest','UpdateVersionTest']
 run([javatool('javac'),'-J-Dfile.encoding=UTF-8','-J-Duser.language=en','--release','8','-encoding','UTF-8','-cp',ANDROID,'-d',OUT,*[src/(n+'.java') for n in names],*[ROOT/'tests'/(n+'.java') for n in tests]])
 for name in tests: run([javatool('java'),'-Dfile.encoding=UTF-8','-cp',str(OUT)+os.pathsep+str(ANDROID),'dev.inknfclab.'+name,*([ROOT/'tests/inksight-fixtures'] if name=='InkSightQuantizerTest' else [])])
