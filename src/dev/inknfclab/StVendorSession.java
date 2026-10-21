@@ -20,13 +20,16 @@ final class StVendorSession implements StPollingTransaction.Link,StPollingTransa
     private final File snapshot=new File("/data/local/tmp/miaomo-st54l-frames.json");
     private final ArrayBlockingQueue<byte[]> replies=new ArrayBlockingQueue<>(4);
     private final StPollingTransaction transaction;
+    private final StFrameTransport transport;
     private Object callback;
     private Class<?> callbackType;
     private volatile int expected=-1;
+    private volatile int expectedOid=-1;
     private boolean registered,paused;
     private Method pause,resume;
     StVendorSession(Object adapter,Class<?> api,String chip,String firmware,QPollBackend.Listener log){
-        this.adapter=adapter;this.api=api;this.log=log;identity=chip+"/"+firmware;transaction=new StPollingTransaction(this,this);
+        this.adapter=adapter;this.api=api;this.log=log;identity=chip+"/"+firmware;
+        transport=new StFrameTransport(this::rawExchange);transaction=new StPollingTransaction(this,this);
     }
     private Object invoke(String name,Class<?>[] types,Object... args)throws Exception{
         try{return api.getMethod(name,types).invoke(adapter,args);}
@@ -50,7 +53,8 @@ final class StVendorSession implements StPollingTransaction.Link,StPollingTransa
                 if(code==INTERFACE_TRANSACTION){if(reply!=null)reply.writeString("android.nfc.INfcVendorNciCallback");return true;}
                 if(code!=responseCode)return super.onTransact(code,data,reply,flags);
                 data.enforceInterface("android.nfc.INfcVendorNciCallback");int gid=data.readInt(),oid=data.readInt();byte[] value=data.createByteArray();
-                if(gid==15&&oid==1&&expected>=0&&value!=null&&value.length>=2&&(value[0]&255)==expected)replies.offer(value.clone());
+                if(gid==15&&oid==expectedOid&&expectedOid>=0&&value!=null&&value.length>=1
+                    &&(oid!=1||value.length>=2&&(value[0]&255)==expected))replies.offer(value.clone());
                 if(reply!=null)reply.writeNoException();return true;
             }
         };
@@ -63,7 +67,7 @@ final class StVendorSession implements StPollingTransaction.Link,StPollingTransa
         registered=true;try{register.invoke(adapter,callback);}catch(Exception failed){try{close();}catch(Exception cleanup){failed.addSuppressed(cleanup);}throw failed;}
         log.event("st_vendor_callback","registered; configuration not yet changed");
     }
-    byte[] start()throws Exception{return transaction.start();}
+    byte[] start()throws Exception{byte[] original=transaction.start();log.event("st_frame_transport",transport.channel());return original;}
     boolean restore()throws Exception{return transaction.restore();}
     boolean needsRecovery(){return transaction.needsRecovery();}
     byte[] baseline(){return transaction.baseline();}
@@ -82,14 +86,17 @@ final class StVendorSession implements StPollingTransaction.Link,StPollingTransa
         paused=false;log.event("st_polling_resume","requested");
     }
     @Override public byte[] exchange(byte[] command)throws Exception{
-        replies.clear();expected=command[0]&255;
+        return transport.exchange(command);
+    }
+    private byte[] rawExchange(int oid,byte[] command)throws Exception{
+        replies.clear();expected=oid==1?(command[0]&255):-1;expectedOid=oid;
         try{
-            log.event("st_vendor_tx","GID=0F OID=01 "+Protocol.hex(command));
-            Object result=invoke("sendVendorNciMessage",new Class<?>[]{int.class,int.class,int.class,byte[].class},1,15,1,command);
+            log.event("st_vendor_tx",String.format(java.util.Locale.ROOT,"GID=0F OID=%02X ",oid)+Protocol.hex(command));
+            Object result=invoke("sendVendorNciMessage",new Class<?>[]{int.class,int.class,int.class,byte[].class},1,15,oid,command);
             if(!(result instanceof Number)||((Number)result).intValue()!=0)throw new IOException("ST vendor NCI API rejected command: "+result);
             byte[] payload=replies.poll(2500,TimeUnit.MILLISECONDS);if(payload==null)throw new IOException("ST vendor response timeout; command acceptance unconfirmed");
-            log.event("st_vendor_rx",Protocol.hex(payload));return payload;
-        }finally{expected=-1;}
+            log.event("st_vendor_rx",String.format(java.util.Locale.ROOT,"OID=%02X ",oid)+Protocol.hex(payload));return payload;
+        }finally{expected=-1;expectedOid=-1;}
     }
     @Override public byte[] load()throws Exception{
         if(!snapshot.exists())return null;
@@ -97,12 +104,14 @@ final class StVendorSession implements StPollingTransaction.Link,StPollingTransa
         JSONObject saved=new JSONObject(new String(Files.readAllBytes(snapshot.toPath()),StandardCharsets.UTF_8));
         if(!identity.equals(saved.getString("identity")))throw new IOException("ST recovery snapshot belongs to another controller/firmware; left unchanged");
         byte[] frames=android.util.Base64.decode(saved.getString("frames"),android.util.Base64.NO_WRAP);Protocol.validatePolling(frames);
+        transport.restoreChannel(saved.optString("channel","bridge"));
         log.event("st_recovery_pending","owned snapshot found; will restore before another configuration");return frames;
     }
     @Override public void save(byte[] frames)throws Exception{
         if(snapshot.exists())throw new IOException("Existing ST recovery snapshot must be restored first");
+        transport.pin();
         File temporary=new File(snapshot.getPath()+".new");
-        byte[] data=new JSONObject().put("identity",identity).put("frames",android.util.Base64.encodeToString(frames,android.util.Base64.NO_WRAP)).toString().getBytes(StandardCharsets.UTF_8);
+        byte[] data=new JSONObject().put("identity",identity).put("channel",transport.channel()).put("frames",android.util.Base64.encodeToString(frames,android.util.Base64.NO_WRAP)).toString().getBytes(StandardCharsets.UTF_8);
         try(FileOutputStream output=new FileOutputStream(temporary)){android.system.Os.chmod(temporary.getPath(),0600);output.write(data);output.getFD().sync();}
         Files.move(temporary.toPath(),snapshot.toPath(),StandardCopyOption.ATOMIC_MOVE);log.event("st_recovery_saved","baseline persisted before setter");
     }

@@ -43,6 +43,12 @@ public class StandardNfcTest {
         ((ExecutorService)get("work")).submit(()->{}).get(10,TimeUnit.SECONDS);ShadowLooper.idleMainLooper();
         ((ExecutorService)get("work")).submit(()->{}).get(10,TimeUnit.SECONDS);ShadowLooper.idleMainLooper();
     }
+    void supplyTestFrame()throws Exception{
+        PicturePanel panel=(PicturePanel)get("pictures");
+        Constructor<ImageCodec.PreparedImage> make=ImageCodec.PreparedImage.class.getDeclaredConstructor(Bitmap.class,Bitmap.class,byte[].class);make.setAccessible(true);
+        Bitmap preview=Bitmap.createBitmap(2,2,Bitmap.Config.ARGB_8888);
+        field(PicturePanel.class,"frame").set(panel,new PicturePanel.Frame(make.newInstance(preview,preview,new byte[ImageCodec.PACKED_LENGTH]),new JSONObject()));
+    }
     @After public void close()throws Exception{if(controller!=null){if(!paused)controller.pause();settle();controller.stop().destroy();}}
     @Test public void autoWithoutShizukuStartsStandardD1Reader()throws Exception{
         assertNull(get("remote"));invoke("begin",new Class<?>[]{int.class},2);settle();
@@ -51,10 +57,7 @@ public class StandardNfcTest {
         assertEquals("standard_reader",report.getString("route"));assertFalse(report.getBoolean("shell_connected"));assertFalse(report.getBoolean("vendor_ready"));
     }
     @Test public void photoPushCanArmStandardReaderWithoutShell()throws Exception{
-        PicturePanel p=(PicturePanel)get("pictures");
-        Constructor<ImageCodec.PreparedImage> make=ImageCodec.PreparedImage.class.getDeclaredConstructor(Bitmap.class,Bitmap.class,byte[].class);make.setAccessible(true);
-        Bitmap preview=Bitmap.createBitmap(2,2,Bitmap.Config.ARGB_8888);
-        field(PicturePanel.class,"frame").set(p,new PicturePanel.Frame(make.newInstance(preview,preview,new byte[ImageCodec.PACKED_LENGTH]),new JSONObject()));
+        supplyTestFrame();
         invoke("begin",new Class<?>[]{int.class},3);settle();assertTrue(nfc.isInReaderMode());assertFalse((Boolean)get("qSession"));
         SessionLog s=(SessionLog)get("session");String logs=new String(Files.readAllBytes(new File(s.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(logs.contains("standard_reader"));assertFalse("No tag means no APDU or upload",logs.contains("apdu_tx"));
@@ -76,34 +79,75 @@ public class StandardNfcTest {
         assertFalse(nfc.isInReaderMode());assertFalse((Boolean)get("active"));
     }
     static final class FakeShell extends Binder {
-        final String version;int vendorStarts;boolean denyPreflight,vendorReady;
+        final String version;int vendorStarts;boolean denyPreflight,vendorReady,stQueryRejected,stConfigurationUncertain;
         FakeShell(String version){this.version=version;}
         @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags){
             data.enforceInterface(DiagnosticService.DESCRIPTOR);String result="{}";
             if(code==DiagnosticService.SERVICE_VERSION)result=version;
-            if(code==DiagnosticService.Q_START){vendorStarts++;result="ERROR simulated vendor start failed";}
+            if(code==DiagnosticService.Q_START){vendorStarts++;result=stQueryRejected?"ERROR java.io.IOException: ST command 0x15 response rejected: 150B":"ERROR simulated vendor start failed";}
+            if(code==DiagnosticService.Q_STATUS)result=stQueryRejected
+                ?"{\"controller_profile\":\"st54l_custom_frames\",\"running\":false,\"st_frames_configured\":"+stConfigurationUncertain+",\"q_discovery_sent\":false,\"restore\":\""+(stConfigurationUncertain?"st_restore_failed":"not_required")+"\",\"error\":\"ST command 0x15 response rejected: 150B\"}"
+                :"{}";
             if(code==DiagnosticService.CAPABILITIES){
                 if(denyPreflight){reply.writeException(new SecurityException("simulated read-only permission denied"));return true;}
-                result=vendorReady?"{\"route\":\"nxp_qtag\",\"vendor_ready\":true,\"reason\":\"fixture vendor API present\"}":"{\"route\":\"standard_reader\",\"vendor_ready\":false,\"reason\":\"专用接口不可用，使用标准 NFC\"}";
+                result=vendorReady?(stQueryRejected?"{\"route\":\"st54l_custom_frames\",\"chip\":\"ST54L\",\"vendor_ready\":true,\"reason\":\"ST54L fixture\"}":"{\"route\":\"nxp_qtag\",\"vendor_ready\":true,\"reason\":\"fixture vendor API present\"}"):"{\"route\":\"standard_reader\",\"vendor_ready\":false,\"reason\":\"专用接口不可用，使用标准 NFC\"}";
             }
             if(code==DiagnosticService.DRAIN)result="{\"text\":\"\",\"dropped_lines\":0,\"buffered_chars\":0,\"running\":false}";
             reply.writeNoException();reply.writeString(result);return true;
         }
     }
     @Test public void unknownVendorPreflightFallsBackWithoutVendorStart()throws Exception{
-        FakeShell shell=new FakeShell("9");field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("10");field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);
     }
     @Test public void staleShellServiceFallsBackBeforeVendorTransportStarts()throws Exception{
-        FakeShell shell=new FakeShell("8");field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("9");field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));assertTrue(((TextView)get("compatibilityStatus")).getText().toString().contains("版本较旧"));
     }
     @Test public void deniedReadOnlyPreflightCanStillUseStandardReader()throws Exception{
-        FakeShell shell=new FakeShell("9");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("10");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);
     }
     @Test public void vendorStartFailureNeverSwitchesToStandardWhileCleanupIsPending()throws Exception{
-        FakeShell shell=new FakeShell("9");shell.vendorReady=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("10");shell.vendorReady=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
+    }
+    @Test public void rejectedReadOnlyStQueryFallsBackOnlyAfterCleanRollbackState()throws Exception{
+        FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));
+        SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue("failure detail retained",events.contains("st_vendor_read_rejected"));
+        assertTrue("exact 0B status retained",events.contains("st_vendor_read_rejected_status"));
+        assertTrue("standard reader selected",events.contains("transport_selected"));
+    }
+    @Test public void rejectedStQueryDoesNotFallbackWhenCleanupCannotConfirmPristineState()throws Exception{
+        FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;shell.stConfigurationUncertain=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        invoke("begin",new Class<?>[]{int.class},2);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
+        SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(events.contains("st_fallback_blocked"));assertFalse(events.contains("transport_fallback"));
+    }
+    @Test public void photoPushFallsBackAfterRejectedStReadWithoutUploadingUntilTag()throws Exception{
+        supplyTestFrame();FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        invoke("begin",new Class<?>[]{int.class},3);settle();assertTrue(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));
+        SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(events.contains("transport_fallback"));assertFalse(events.contains("apdu_tx"));assertFalse(events.contains("image_transfer_started"));
+    }
+    @Test public void fallbackKeepsTheControllerStatusInItsOwnEvent()throws Exception{
+        FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());
+        SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
+        boolean status=false,fallback=false;
+        for(String line:events.split("\\n")){
+            JSONObject item=new JSONObject(line);String type=item.optString("type"),detail=item.optString("detail");
+            if(type.equals("st_vendor_read_rejected_status")&&detail.equals("0B"))status=true;
+            if(type.equals("transport_fallback")&&new JSONObject(detail).optString("fallback_from").equals("st54l_custom_frames"))fallback=true;
+        }
+        assertTrue(status);assertTrue(fallback);
+    }
+    @Test public void explicitQPollDiagnosticKeepsRejectedStStatusVisible()throws Exception{
+        FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        invoke("begin",new Class<?>[]{int.class},4);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
+        SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
+        assertFalse(events.contains("transport_fallback"));assertTrue(events.contains("transport_start_error"));
     }
 }

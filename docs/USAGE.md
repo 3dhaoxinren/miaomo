@@ -4,11 +4,13 @@
 
 ## 准备
 
-需要 Android 8.0 以上手机、手机内置 NFC，以及保留原 NFC 主控和线圈的华为 3.98 英寸四色墨水屏。Q-Poll 曾在小米 17 Pro Max / HyperOS 4 测试；**小米 15 Pro 尚无实机验证**。公开 `haotian` 设备树仅显示参考构建包含 ST NFC 扩展，不能确定用户手机当前栈或芯片；RF getter 兼容不代表 vendor command 已适配。
+需要 Android 8.0 以上手机、手机内置 NFC，以及保留原 NFC 主控和线圈的华为 3.98 英寸四色墨水屏。小米 15 Pro / Android 16 已确认 ST54L (`02.04.1188`)；旧 ST `0x15` 读帧返回 `0B`（参考 ST 源码为不支持）。0.5.8 新增原生读帧通道，但手机端尚未成功寻卡或刷新。
 
-1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.7.apk`。
+1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.8.apk`。
 2. 如需专用寻卡，按 [Shizuku 官方指南](https://shizuku.rikka.app/zh-hans/guide/setup/) 启动 Shizuku。支持无线调试的系统可按指南配对启动，也可使用电脑 ADB 启动；这里不需要 root。
 3. 开启手机 NFC，打开喵墨。无需填写服务器地址或 API Key。照片处理在本地完成；检查更新时才读取 GitHub 公开发布信息。
+
+0.5.8 更新了 Shizuku 后台服务；若提示服务版本较旧，请重启 Shizuku 后回到喵墨重新连接。小米 15 Pro 的首次验证请先用「检测屏幕」并导出日志，确认 D1 后再推图。
 
 手机重启后通常需要重新启动 Shizuku；仅安装 Shizuku 管理器并不代表其服务已运行。
 
@@ -30,18 +32,16 @@
 设备页新增 **检查手机兼容性**，结果写入导出日志的 `compatibility.json`，包括 App/系统版本、NFC 状态、可尝试通道、控制器来源及缺失接口。它只检查接口，不寻卡、不发送 APDU；`vendor_ready=true` 只表示满足软件入口条件。
 
 - **标准 NFC（跨品牌，无需 Shizuku）**：通过 Android 公共 ReaderMode 寻找 NFC-A/B ISO-DEP 标签，支持检测 D1 与推图。先经 D1 核对目标型号、色数和 UID，才开始写图。能否发现这块屏幕仍由手机 NFC 栈决定。
-- **自动选择**：已连接 Shizuku 时先检查 NXP / ST54L 能力；缺少专用接口、芯片未知或未启用对应试验时，记录原因后尝试标准通道。专用后端已经启动却出错时，会停止并执行原有恢复流程，不切换到另一条通道继续写。
+- **自动选择**：已连接 Shizuku 时先检查 NXP / ST54L 能力；缺少专用接口、芯片未知或未启用对应试验时，记录原因后尝试标准通道。ST54L 的 `0x15` 读帧查询若得到非零状态，仅在清理状态确认没有修改配置时回退标准 NFC；状态不确定或显式 Q-Poll 诊断会停止并保留错误。
 - **标准模式未发现屏幕**：华为屏可能需要专有的 7A 轮询短帧。标准 API 无法补上此功能，不能靠延长等待或打开 Shizuku 获得 ROM 没有提供的接口。
 
-小米 10 青春版 Android 12 的旧日志只证明缺少 RF getter，尚未确定其它厂商能力。请更新 0.5.7，先试标准模式和只读兼容性检查，保存报告继续排查。不要根据“小米”“NXP”或“Android 12”直接认定支持 Q-Poll。
+小米 10 青春版 Android 12 的旧日志只证明缺少 RF getter，尚未确定其它厂商能力。请更新至 0.5.8，先试标准模式和只读兼容性检查，保存报告继续排查。不要根据“小米”“NXP”或“Android 12”直接认定支持 Q-Poll。
 
-### 小米 15 Pro / ST54L 实验适配（0.5.5）
+### 小米 15 Pro / ST54L 实验适配（0.5.8）
 
-1. 安装最新版，重新连接 Shizuku NFC 服务，先点“读取厂商诊断信息”。新版会记录手机/系统、芯片、固件以及实际 Binder 方法签名。
-2. 只有 `getChipId` 实际返回 `ST54L` 时，在设备页“推送设置”启用 **ST54L 适配试验（小米 15 Pro 等）**，阅读并确认提示。默认关闭；其他 ST 型号和未知芯片会拒绝配置。
-3. 保持 NFC 空闲并贴稳屏幕，先点 **检测屏幕**。该步骤只发送 D1，不上传照片。
-4. ST 路径通过 vendor callback 读取原始短帧，在 shell 目录保存恢复快照，再设置 7A 并核对读回。结束、超时或 App Binder 断开时尝试恢复原值并核对；进程异常终止后会在下一次 ST 会话先恢复已保存快照。
-5. 只有收到标签回调、IsoDep 连接和正确的 D1 响应，才继续测试照片。控制器配置读回成功也不能证明发射、标签派发或刷屏成功。
+1. 在设备页检查兼容性，确认 `getChipId` 实际返回 `ST54L` 后，才启用 **ST54L 适配试验**；默认关闭。
+2. 若 ST `0x15` 查询收到非零状态，0.5.8 只会在后台确认配置未被修改且会话已清理后，记录 `st-fallback-cleanup.json` 并尝试标准 NFC。标准 NFC 仍需要系统先激活屏幕为 ISO-DEP。
+3. 若清理状态不确定，App 会停止，不回退；显式 Q-Poll 诊断也不会自动切换。`st_vendor_read_rejected_status` 会记录原始 ST 状态码。标准回退不代表已经寻到屏幕，只有 D1 正确后才会继续传图。
 
 ST 配置日志可见 `controller_profile=st54l_custom_frames`、`st_vendor_tx/rx`、`st_frames_verified`；正常结束应出现 `restore=st_frames_matched`。若恢复失败会保留 `/data/local/tmp/miaomo-st54l-frames.json` 并阻止新会话；不要手动删除恢复快照，应导出日志排查。
 

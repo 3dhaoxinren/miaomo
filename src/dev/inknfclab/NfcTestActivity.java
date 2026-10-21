@@ -50,7 +50,7 @@ public final class NfcTestActivity extends Activity {
     private File pendingExport;
     private final StringBuilder screen=new StringBuilder();
         private final Shizuku.UserServiceArgs serviceArgs=new Shizuku.UserServiceArgs(new ComponentName("dev.inknfclab.test",DiagnosticService.class.getName()))
-        .daemon(false).processNameSuffix("nfc_diagnostics").version(9).debuggable(true);
+        .daemon(false).processNameSuffix("nfc_diagnostics").version(10).debuggable(true);
     private final ServiceConnection serviceConnection=new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
             binding=false; remote=binder; show("Shizuku 诊断服务已连接（shell）"); refresh();
@@ -187,7 +187,7 @@ public final class NfcTestActivity extends Activity {
         Parcel data=Parcel.obtain(),reply=Parcel.obtain();
         try {
             String serviceVersion=call(DiagnosticService.SERVICE_VERSION);
-            if(!"9".equals(serviceVersion))throw new IOException("Shizuku 诊断服务版本不匹配，请重启 Shizuku，再回到喵墨连接 NFC 服务。");
+            if(!"10".equals(serviceVersion))throw new IOException("Shizuku 诊断服务版本不匹配，请重启 Shizuku，再回到喵墨连接 NFC 服务。");
             data.writeInterfaceToken(DiagnosticService.DESCRIPTOR);data.writeStrongBinder(qOwner);data.writeInt(getSharedPreferences("nfc_compat",0).getBoolean("allow_unverified_rf_snapshot",false)?1:0);
             data.writeInt(getSharedPreferences("nfc_compat",0).getBoolean("allow_st54l_experiment",false)?1:0);
             if(!binder.transact(DiagnosticService.Q_START,data,reply,0))throw new IOException("Q-Poll 服务版本过旧");reply.readException();String result=reply.readString();if(result==null || result.startsWith("ERROR "))throw new IOException(result);return result;
@@ -268,9 +268,9 @@ public final class NfcTestActivity extends Activity {
             .put("scope","只读接口检查；未寻卡、未发送 APDU，不代表实屏验证通过");
         if(probeShell&&remote!=null){
             String serviceVersion=call(DiagnosticService.SERVICE_VERSION);report.put("diagnostic_service_version",serviceVersion);
-            if(!"9".equals(serviceVersion))return report.put("diagnostic_service_compatible",false).put("route",NfcCapabilities.STANDARD).put("vendor_ready",false)
+            if(!"10".equals(serviceVersion))return report.put("diagnostic_service_compatible",false).put("route",NfcCapabilities.STANDARD).put("vendor_ready",false)
                 .put("reason","Shizuku NFC 服务版本较旧（"+serviceVersion+"）；未调用厂商接口，将尝试标准 NFC。要使用专用寻卡，请重启 Shizuku 后重新连接。")
-                .put("diagnostic_service_error","expected 9, received "+serviceVersion);
+                .put("diagnostic_service_error","expected 10, received "+serviceVersion);
             report.put("diagnostic_service_compatible",true);
             Parcel data=Parcel.obtain(),reply=Parcel.obtain();IBinder binder=remote;
             try{
@@ -297,6 +297,28 @@ public final class NfcTestActivity extends Activity {
                 "可尝试通道："+report.optString("route")+"\n\n"+report.optString("reason")+"\n\n这是只读检查，结果已记入本次日志；实际兼容需依次验证寻卡、D1 和刷新。";
             main.post(()->{if(destroyed)return;compatibilityStatus.setText(report.optString("reason"));new AlertDialog.Builder(this).setTitle("手机兼容性").setMessage(message).setPositiveButton("知道了",null).show();});
         }catch(Throwable e){SessionLog s=session;if(s!=null)s.event("compatibility_error",Log.getStackTraceString(e));main.post(()->{if(!destroyed)compatibilityStatus.setText("检测未完成："+e.getMessage());});}});
+    }
+    private JSONObject confirmedStReadRejection(SessionLog s,JSONObject report,Throwable failure,int mode){
+        String detail=Log.getStackTraceString(failure);
+        if(mode==4||!NfcCapabilities.ST.equals(report.optString("route"))||!"ST54L".equalsIgnoreCase(report.optString("chip"))
+            ||!detail.contains("ST command 0x15 response rejected:"))return null;
+        try{
+            JSONObject state=new JSONObject(call(DiagnosticService.Q_STATUS));
+            boolean clean=!state.optBoolean("running")&&!state.optBoolean("st_frames_configured")
+                &&!state.optBoolean("q_discovery_sent")&&"not_required".equals(state.optString("restore"))
+                &&"st54l_custom_frames".equals(state.optString("controller_profile"))
+                &&state.optString("error").contains("ST command 0x15 response rejected:")
+                &&detail.contains(state.optString("error"));
+            if(clean)return state;
+            s.event("st_fallback_blocked",state.toString());
+        }catch(Throwable verify){s.event("st_fallback_verify_error",Log.getStackTraceString(verify));}
+        return null;
+    }
+    private static String rejectedStStatus(JSONObject state){
+        String error=state.optString("error");String marker="response rejected:";int at=error.indexOf(marker);
+        if(at<0)return "unknown";String response=error.substring(at+marker.length()).trim();
+        if(response.length()<4)return "unknown";String status=response.substring(2,4).toUpperCase(Locale.ROOT);
+        return status.matches("[0-9A-F]{2}")?status:"unknown";
     }
     private void begin(int mode) {
         if(!resumed) return;
@@ -341,7 +363,24 @@ public final class NfcTestActivity extends Activity {
                 if(mode==4&&!vendor)throw new IOException(report.optString("reason"));
                 if(vendor){
                     if(!active||epoch.get()!=token)return;qSession=true;
-                    String qStatus=qStart();s.event("q_start",qStatus);
+                    String qStatus;
+                    try{qStatus=qStart();}
+                    catch(Throwable vendorFailure){
+                        JSONObject clean=confirmedStReadRejection(s,report,vendorFailure,mode);
+                        if(clean==null)throw vendorFailure;
+                        qSession=false;String code=rejectedStStatus(clean);
+                        JSONObject standard=new JSONObject(report.toString()).put("route",NfcCapabilities.STANDARD).put("vendor_ready",false)
+                            .put("fallback_from",NfcCapabilities.ST).put("st_rejected_status",code)
+                            .put("reason","ST54L 读取轮询配置被控制器拒绝（"+code+"）；清理确认未修改配置。已改用标准 NFC；若未发现屏幕，此系统通道无法代发 7A 唤醒帧。");
+                        s.event("st_vendor_read_rejected",Log.getStackTraceString(vendorFailure));
+                        s.event("st_vendor_read_rejected_status",code);
+                        s.write("st-fallback-cleanup.json",clean.toString(2));s.write("compatibility.json",standard.toString(2));
+                        s.event("transport_fallback",standard.toString());s.event("transport_selected",NfcCapabilities.STANDARD);
+                        show("ST54L 读取配置失败（"+code+"），确认未写入射频配置；改用标准 NFC。若屏幕未被系统激活，将无法继续读取 D1。");
+                        main.post(()->{if(active&&epoch.get()==token){compatibilityStatus.setText(standard.optString("reason"));enableReader(s,mode,frame,token);}});
+                        return;
+                    }
+                    s.event("q_start",qStatus);
                     if(!active||epoch.get()!=token){s.event("q_cancel_cleanup",call(DiagnosticService.Q_STOP));return;}
                     String selected=new JSONObject(qStatus).optString("controller_profile","unknown");s.event("transport_selected",selected);
                     boolean unverified=new JSONObject(qStatus).optString("restore").equals("not_verifiable");

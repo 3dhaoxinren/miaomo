@@ -10,6 +10,7 @@ public final class StPollingTransactionTest {
         byte[] frames={0},saved;
         int writes,pauses,resumes,reads;
         boolean rejectQuery,rejectPause,rejectSave,failAfterWrite,failRestore,corruptFirstReadback;
+        int queryStatus=1;
         final List<String> order=new ArrayList<>();
         public void pause()throws Exception{pauses++;if(rejectPause)throw new IOException("no permission");order.add("pause");}
         public void resume(){resumes++;order.add("resume");}
@@ -19,7 +20,7 @@ public final class StPollingTransactionTest {
         public byte[] exchange(byte[] cmd)throws Exception{
             int op=cmd[0]&255;
             if(op==0x15){
-                reads++;if(rejectQuery)return new byte[]{0x15,1};
+                reads++;if(rejectQuery)return new byte[]{0x15,(byte)queryStatus};
                 byte[] value=frames;if(corruptFirstReadback&&writes==1){value=new byte[]{0};corruptFirstReadback=false;}
                 byte[] response=new byte[value.length+2];response[0]=0x15;System.arraycopy(value,0,response,2,value.length);return response;
             }
@@ -39,6 +40,7 @@ public final class StPollingTransactionTest {
         require(Arrays.equals(t.start(),new byte[]{0}));require(Arrays.equals(d.frames,Protocol.polling7A()));require(d.saved!=null);require(d.order.indexOf("save")<d.order.indexOf("write"));
         t.restore();require(Arrays.equals(d.frames,new byte[]{0})&&d.saved==null&&!t.needsRecovery());require(d.pauses==d.resumes);
         d=new Device();d.rejectQuery=true;StPollingTransaction q=new StPollingTransaction(d,d);fails(q::start);require(d.writes==0&&d.saved==null&&d.resumes==1);
+        d=new Device();d.rejectQuery=true;d.queryStatus=0x0b;StPollingTransaction rejected15=new StPollingTransaction(d,d);fails(rejected15::start);require(d.writes==0&&d.saved==null&&d.resumes==1);
         d=new Device();d.rejectPause=true;StPollingTransaction p=new StPollingTransaction(d,d);fails(p::start);require(d.writes==0&&d.reads==0);
         d=new Device();d.rejectSave=true;StPollingTransaction storage=new StPollingTransaction(d,d);fails(storage::start);require(d.writes==0);
         d=new Device();d.failAfterWrite=true;StPollingTransaction lost=new StPollingTransaction(d,d);fails(lost::start);require(Arrays.equals(d.frames,new byte[]{0})&&d.saved==null);
@@ -50,6 +52,6 @@ public final class StPollingTransactionTest {
         fails(()->NfcControllerProfile.select("ST54L",-1,false));fails(()->NfcControllerProfile.select("ST54T",16,true));
         require(NfcControllerProfile.select("0xc1",16,false)==NfcControllerProfile.Kind.NXP_QTAG);fails(()->NfcControllerProfile.select("unknown",-1,true));
         fails(()->StPollingTransaction.response(0x15,new byte[]{0x13,0,0}));fails(()->StPollingTransaction.response(0x15,new byte[]{0x15,1}));
-        System.out.println("PASS StPollingTransactionTest checks="+checks+": snapshot before write; exact 7A readback; restore on timeout/mismatch; persisted recovery; controller profile separation. SIMULATED_TRANSPORT_ONLY");
+        System.out.println("PASS StPollingTransactionTest checks="+checks+": nonzero 0x15/0B query aborts before snapshot/setter; exact 7A readback; restore on timeout/mismatch; persisted recovery; SIMULATED_TRANSPORT_ONLY");
     }
 }

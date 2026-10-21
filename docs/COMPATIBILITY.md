@@ -12,7 +12,7 @@
 
 NXP 路径保留独立 profile 与 RF 快照门禁；不会因 ST 模式或无读回开关向未知控制器发送 NXP QTag 配置。ST 路径也不接受未知 ST 芯片，必须能注册标准 vendor NCI callback、暂停/恢复轮询、读出可解析的 ST polling 配置后才可写入。
 
-小米 15 Pro 尚无实机验证。公开参考设备树固定提交 [ccb9915](https://github.com/admin0330/Xiaomi-15-Pro-Device-tree/blob/ccb99153989d02640af781a34c8198b53dac3443/device/xiaomi/haotian/device.mk) 包含 ST NFC 扩展，仅用于选择研究方向，不替代当前手机的接口/权限/固件探测。此版本只完成软件兼容实现及模拟事务验证，不能宣称已经寻卡或刷屏成功。
+小米 15 Pro 已完成接口盘点与失败日志采集，专用寻卡和刷屏尚未成功。公开参考设备树固定提交 [ccb9915](https://github.com/admin0330/Xiaomi-15-Pro-Device-tree/blob/ccb99153989d02640af781a34c8198b53dac3443/device/xiaomi/haotian/device.mk) 包含 ST NFC 扩展，仅用于选择研究方向，不替代当前手机的接口/权限/固件探测。此版本只完成软件兼容实现及模拟事务验证，不能宣称已经寻卡或刷屏成功。
 
 旧上游 ST 路径还使用 root 注入解决 MIFARE 重选；本 App 没有引入该组件。即便 ST 短帧读回成功，系统也可能仍不派发目标 Tag。应以厂商应答、Tag/IsoDep/D1 和实际面板刷新逐级验收。
 
@@ -33,3 +33,23 @@ NXP 路径保留独立 profile 与 RF 快照门禁；不会因 ST 模式或无�
 只读兼容报告不会自动证明手机能刷屏；新增机型仍以“寻卡 → ISO-DEP → 正确 D1 → 传图 → 实屏刷新”逐项记录。当前没有连接待测手机，本次新增验证为 API 夹具和 Android 框架模拟。
 
 参考：[上游多设备分析](https://github.com/wiwiwei/ink-nfc-lab/blob/main/docs/DEVICE_COMPATIBILITY.md)、[Android 12 INfcAdapter](https://android.googlesource.com/platform/frameworks/base/+/android-12.0.0_r1/core/java/android/nfc/INfcAdapter.aidl)。Android 12 参考接口包含四参数 ReaderMode，未提供本项目所用的 vendor NCI / RF getter；厂商 ROM 可能另有扩展，以实际检测为准。
+
+## 0.5.8 ST54L 桥接 / 原生通道
+
+小米 15 Pro（2410DPN6CC / haotian），Android 16 / HyperOS `OS3.0.309.0.WOBCNXM`，实读芯片 ST54L、固件 `02.04.1188`。vendor NCI、callback、`pausePolling(long)`、`resumePolling()` 可见；旧桥接命令 GID `0F` / OID `01` / payload `15` 返回 `15 0B`，在设置短帧、Tag、D1 和图片传输之前停止。
+
+ST 公开实现将旧桥接 getter `15` 转为原生 **OID `1E` / 空 payload**，setter `13` 转为 **OID `1D` / 帧列表**。其 `NCI_STATUS_NOT_SUPPORTED` 定义为 `0B`。本机日志未看到对应的 HAL 发送记录，故中间件拒绝也是可能原因；这不是“线圈未对准”或屏幕低电压的证据，也不能凭参考源码证明本机使用相同中间件版本。
+
+本版仅在未固定通道、旧 getter 明确返回 `15 0B` 时探测原生 getter；读到格式有效的原始帧后保存快照和通道，再发送 `012A020A7A`。该 7A 帧未设 CRC 自动添加位，因此原生设置 payload 与桥接帧列表相同。恢复原生配置时保留原始字节（包括已有 CRC），不再经桥接转换。设置后读回不符或应答丢失会尝试原通道恢复；恢复未核验时保留快照并阻止新会话。旧快照缺少 channel 字段时仍走 bridge；未知通道拒绝处理。
+
+若读帧仍遭非零状态拒绝，且后台确认 `st_frames_configured=false`、`restore=not_required`、`running=false`、`q_discovery_sent=false`，拒绝码与异常一致，自动模式才回退标准 NFC。超时、设置阶段失败、清理状态不确定和显式 Q-Poll 诊断不触发此回退。标准 NFC 仍可能无法替代 7A 唤醒。
+
+日志保留 OID、原始响应、选定的 `st_frame_transport`、拒绝状态和恢复状态。Shizuku 诊断服务升级到 10，防止旧后台代码继续运行；更新后如提示后台较旧，请重启 Shizuku 并重新连接。
+
+纯 Java 夹具覆盖桥接/原生协商、先保存后设置、含 CRC 原配置精确恢复、读回不符、应答丢失、两路不支持、畸形响应、超时和持久快照恢复；Android 框架集成验证标准回退和无标签时不发送 APDU。**手机当前未连接，本版原生应答、Tag、D1 和实屏刷新均未实测。**
+
+源码依据（固定 Git blob，已核对下载字节）：
+
+- [ST 命令转换](https://api.github.com/repos/LineageOS/android_hardware_st_nfc/git/blobs/e39e459f7759cdb50e7dbd5be793a11db27dfa53)：getter 转换、setter 转换、原生响应封装。
+- [ST 命令常量](https://api.github.com/repos/LineageOS/android_hardware_st_nfc/git/blobs/9bab334878d26ac36780d5b914ba5f667ed1fda6)：OID `1D/1E` 与桥接子命令 `13/15`。
+- [ST nci_defs.h](https://api.github.com/repos/LineageOS/android_hardware_st_nfc/git/blobs/a7b41a7d9a90c1c7717fdc014b45f69e23dc0eda)：`NCI_STATUS_NOT_SUPPORTED=0x0B`。
