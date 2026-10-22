@@ -68,9 +68,27 @@ final class NfcControllerProbe {
         boolean stCallback=stCallbackAvailable(api);
         NfcCapabilities.Plan plan=NfcCapabilities.inspect(api,info.chip,info.nxpFeature,allowRf,allowSt,stCallback);
         return info.json().put("route",plan.route).put("reason",plan.reason).put("vendor_ready",plan.vendor())
+            .put("support_status",plan.status).put("missing_interfaces",new org.json.JSONArray(Arrays.asList(plan.missing)))
+            .put("interface_inventory",interfaceInventory(api))
+            .put("system_versions",systemVersions()).put("shell_uid",android.os.Process.myUid())
             .put("scope","read-only interface inspection; not a radio or refresh test")
             .put("raw_vendor_api",QPollCompatibility.hasVendorSend(api)).put("reader_api",QPollCompatibility.hasReader(api))
             .put("rf_getter",QPollCompatibility.hasSnapshot(api)).put("st_callback",stCallback);
+    }
+    static JSONObject interfaceInventory(Class<?> api)throws Exception{
+        java.util.TreeSet<String> signatures=new java.util.TreeSet<>();
+        for(Method m:api.getMethods())signatures.add(m.toGenericString());
+        org.json.JSONArray entries=new org.json.JSONArray();int count=0;
+        for(String signature:signatures){if(count++>=192)break;entries.put(signature);}
+        return new JSONObject().put("class",api.getName()).put("signatures",entries).put("total",signatures.size()).put("truncated",signatures.size()>192);
+    }
+    static JSONObject systemVersions()throws Exception{
+        JSONObject result=new JSONObject();
+        for(String key:new String[]{"ro.build.version.incremental","ro.build.version.security_patch","ro.mi.os.version.name","ro.miui.ui.version.name","ro.build.version.oplusrom","ro.build.version.emui"}){
+            try{Object value=Class.forName("android.os.SystemProperties").getMethod("get",String.class).invoke(null,key);result.put(key,value);}
+            catch(Exception unavailable){result.put(key+"_error",unavailable.toString());}
+        }
+        return result;
     }
     private NfcControllerProbe(){}
 }

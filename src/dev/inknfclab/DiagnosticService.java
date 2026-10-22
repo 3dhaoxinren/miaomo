@@ -38,7 +38,7 @@ public final class DiagnosticService extends Binder {
                 case DRAIN: result=drain(); break;
                 case STOP: result=stop(); break;
                 case SNAPSHOT: result=command(new String[]{"/system/bin/dumpsys","nfc"}, 10000); break;
-                case SERVICE_VERSION: result="10";break;
+                case SERVICE_VERSION: result="11";break;
                 case CAPABILITIES: result=NfcControllerProbe.capabilities(data.readInt()!=0,data.readInt()!=0).toString();break;
                 case Q_START: result=qpoll.start(data.readStrongBinder(),data.readInt()!=0,data.readInt()!=0);break;
                 case Q_STATUS: result=qpoll.status();break;
@@ -84,7 +84,7 @@ public final class DiagnosticService extends Binder {
         return inventory;
     }
     private String info() throws Exception {
-        JSONObject out=new JSONObject().put("uid",android.os.Process.myUid()).put("scope","read-only getters").put("manufacturer",Build.MANUFACTURER).put("model",Build.MODEL).put("device",Build.DEVICE).put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("display",Build.DISPLAY).put("diagnostic_service_version","10");
+        JSONObject out=new JSONObject().put("uid",android.os.Process.myUid()).put("scope","read-only getters").put("manufacturer",Build.MANUFACTURER).put("model",Build.MODEL).put("device",Build.DEVICE).put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("display",Build.DISPLAY).put("diagnostic_service_version","11");
         try {
             IBinder binder=(IBinder)service("mi_nfc");
             out.put("mi_descriptor",binder==null ? "null" : binder.getInterfaceDescriptor());

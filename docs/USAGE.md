@@ -6,7 +6,7 @@
 
 需要 Android 8.0 以上手机、手机内置 NFC，以及保留原 NFC 主控和线圈的华为 3.98 英寸四色墨水屏。小米 15 Pro / Android 16 已确认 ST54L (`02.04.1188`)；旧 ST `0x15` 读帧返回 `0B`（参考 ST 源码为不支持）。0.5.8 新增原生读帧通道，但手机端尚未成功寻卡或刷新。
 
-1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.8.apk`。
+1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.9.apk`。
 2. 如需专用寻卡，按 [Shizuku 官方指南](https://shizuku.rikka.app/zh-hans/guide/setup/) 启动 Shizuku。支持无线调试的系统可按指南配对启动，也可使用电脑 ADB 启动；这里不需要 root。
 3. 开启手机 NFC，打开喵墨。无需填写服务器地址或 API Key。照片处理在本地完成；检查更新时才读取 GitHub 公开发布信息。
 
@@ -134,3 +134,9 @@ ST 配置日志可见 `controller_profile=st54l_custom_frames`、`st_vendor_tx/r
 ## 图片来源
 
 本页截图来自 0.5.7 源码的 Android 原生界面渲染，使用合成山景插画。NFC、授权和日志状态为渲染环境中的演示状态；截图不是实机连接成功的证明。它们展示实际控件与布局，未用设计稿替代 App 界面。
+
+## 适配提示与反馈（0.5.9）
+
+自动模式检测到缺少专用接口、控制器未适配或芯片尚未识别时，会弹出说明，并保留标准 NFC 尝试。点击「导出适配反馈」分享日志 ZIP；设备页的「检查手机兼容性」也有同一入口。未连接 Shizuku 表示专用接口尚未检查，检测失败不等于系统没有接口。更新后如提示后台较旧，请重启 Shizuku 并重新连接。
+
+反馈时附上屏幕型号、操作步骤与实际现象；日志字段及排查方法见 [适配反馈指南](COMPATIBILITY_FEEDBACK.md)。

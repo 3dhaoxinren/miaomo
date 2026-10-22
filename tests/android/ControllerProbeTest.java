@@ -31,4 +31,9 @@ public class ControllerProbeTest {
         NfcControllerProbe.Info info=NfcControllerProbe.inspect(new Object(),Object.class);
         assertEquals("unknown",info.chip);assertEquals(-1,info.nxpFeature);assertEquals("unavailable",info.source);
     }
+    @Test public void interfaceInventoryPreservesSignaturesWithoutInvokingThem()throws Exception{
+        DirectNxp target=new DirectNxp();org.json.JSONObject inventory=NfcControllerProbe.interfaceInventory(target.getClass());
+        assertEquals(DirectNxp.class.getName(),inventory.getString("class"));assertFalse(inventory.getBoolean("truncated"));
+        assertTrue(inventory.getJSONArray("signatures").toString().contains("getFeatureVersion(java.lang.String)"));assertEquals(0,target.writes);
+    }
 }

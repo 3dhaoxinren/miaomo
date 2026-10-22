@@ -28,6 +28,11 @@ public final class NfcCapabilitiesTest {
         if(!route.equals(plan.route))throw new AssertionError(plan.route+": "+plan.reason);
         if(plan.reason==null||plan.reason.isEmpty())throw new AssertionError("missing explanation");
     }
+    static void status(Class<?> api,String chip,int feature,boolean rf,boolean st,boolean callback,String expected)throws Exception{
+        NfcCapabilities.Plan plan=NfcCapabilities.inspect(api,chip,feature,rf,st,callback);checks++;
+        if(!expected.equals(plan.status))throw new AssertionError(expected+" != "+plan.status);
+        if(expected.equals("missing_interfaces")&&plan.missing.length==0)throw new AssertionError("missing interface names");
+    }
     public static void main(String[] args)throws Exception{
         expect(Android12.class,"unknown",-1,false,false,false,NfcCapabilities.STANDARD);
         expect(Android12.class,"NXP",16,true,false,false,NfcCapabilities.STANDARD);
@@ -45,6 +50,13 @@ public final class NfcCapabilitiesTest {
         expect(WrongReader.class,"NXP",16,true,false,false,NfcCapabilities.STANDARD);
         if(NfcCapabilities.probeVendor(3,true,true)||NfcCapabilities.probeVendor(2,false,false)||NfcCapabilities.probeVendor(1,false,true))throw new AssertionError("standard route must not require shell");checks++;
         if(!NfcCapabilities.probeVendor(3,false,true)||!NfcCapabilities.probeVendor(4,true,true))throw new AssertionError("vendor preflight missing");checks++;
+        status(Android12.class,"NXP",16,true,false,false,"missing_interfaces");
+        status(St4.class,"ST54T",-1,false,true,true,"unadapted_controller");
+        status(Nxp4.class,"unknown",-1,true,false,false,"unidentified_controller");
+        status(St4.class,"ST54L",-1,false,false,true,"experiment_disabled");
+        status(St4.class,"ST54L",-1,false,true,false,"missing_interfaces");
+        status(Nxp4.class,"NXP",16,false,false,false,"missing_interfaces");
+        status(Nxp5.class,"NXP",16,false,false,false,"ready");
         System.out.println("PASS NfcCapabilitiesTest cases="+checks+": Android 12 four-argument API; five-argument API; standard without shell; NXP profile/opt-in; ST callback/restore prerequisites; unknown/wrong signatures fall back without vendor writes. API_FIXTURES_ONLY");
     }
 }

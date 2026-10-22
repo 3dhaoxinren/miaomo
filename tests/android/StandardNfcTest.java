@@ -79,7 +79,7 @@ public class StandardNfcTest {
         assertFalse(nfc.isInReaderMode());assertFalse((Boolean)get("active"));
     }
     static final class FakeShell extends Binder {
-        final String version;int vendorStarts;boolean denyPreflight,vendorReady,stQueryRejected,stConfigurationUncertain;
+        final String version;int vendorStarts,preflights;String capabilityFixture;boolean denyPreflight,vendorReady,stQueryRejected,stConfigurationUncertain;
         FakeShell(String version){this.version=version;}
         @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags){
             data.enforceInterface(DiagnosticService.DESCRIPTOR);String result="{}";
@@ -89,31 +89,33 @@ public class StandardNfcTest {
                 ?"{\"controller_profile\":\"st54l_custom_frames\",\"running\":false,\"st_frames_configured\":"+stConfigurationUncertain+",\"q_discovery_sent\":false,\"restore\":\""+(stConfigurationUncertain?"st_restore_failed":"not_required")+"\",\"error\":\"ST command 0x15 response rejected: 150B\"}"
                 :"{}";
             if(code==DiagnosticService.CAPABILITIES){
+                preflights++;
                 if(denyPreflight){reply.writeException(new SecurityException("simulated read-only permission denied"));return true;}
                 result=vendorReady?(stQueryRejected?"{\"route\":\"st54l_custom_frames\",\"chip\":\"ST54L\",\"vendor_ready\":true,\"reason\":\"ST54L fixture\"}":"{\"route\":\"nxp_qtag\",\"vendor_ready\":true,\"reason\":\"fixture vendor API present\"}"):"{\"route\":\"standard_reader\",\"vendor_ready\":false,\"reason\":\"专用接口不可用，使用标准 NFC\"}";
+                if(capabilityFixture!=null)result=capabilityFixture;
             }
             if(code==DiagnosticService.DRAIN)result="{\"text\":\"\",\"dropped_lines\":0,\"buffered_chars\":0,\"running\":false}";
             reply.writeNoException();reply.writeString(result);return true;
         }
     }
     @Test public void unknownVendorPreflightFallsBackWithoutVendorStart()throws Exception{
-        FakeShell shell=new FakeShell("10");field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("11");field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);
     }
     @Test public void staleShellServiceFallsBackBeforeVendorTransportStarts()throws Exception{
-        FakeShell shell=new FakeShell("9");field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("10");field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));assertTrue(((TextView)get("compatibilityStatus")).getText().toString().contains("版本较旧"));
     }
     @Test public void deniedReadOnlyPreflightCanStillUseStandardReader()throws Exception{
-        FakeShell shell=new FakeShell("10");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("11");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);
     }
     @Test public void vendorStartFailureNeverSwitchesToStandardWhileCleanupIsPending()throws Exception{
-        FakeShell shell=new FakeShell("10");shell.vendorReady=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("11");shell.vendorReady=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
     }
     @Test public void rejectedReadOnlyStQueryFallsBackOnlyAfterCleanRollbackState()throws Exception{
-        FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue("failure detail retained",events.contains("st_vendor_read_rejected"));
@@ -121,19 +123,19 @@ public class StandardNfcTest {
         assertTrue("standard reader selected",events.contains("transport_selected"));
     }
     @Test public void rejectedStQueryDoesNotFallbackWhenCleanupCannotConfirmPristineState()throws Exception{
-        FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;shell.stConfigurationUncertain=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;shell.stConfigurationUncertain=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(events.contains("st_fallback_blocked"));assertFalse(events.contains("transport_fallback"));
     }
     @Test public void photoPushFallsBackAfterRejectedStReadWithoutUploadingUntilTag()throws Exception{
-        supplyTestFrame();FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        supplyTestFrame();FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},3);settle();assertTrue(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(events.contains("transport_fallback"));assertFalse(events.contains("apdu_tx"));assertFalse(events.contains("image_transfer_started"));
     }
     @Test public void fallbackKeepsTheControllerStatusInItsOwnEvent()throws Exception{
-        FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         boolean status=false,fallback=false;
@@ -145,9 +147,74 @@ public class StandardNfcTest {
         assertTrue(status);assertTrue(fallback);
     }
     @Test public void explicitQPollDiagnosticKeepsRejectedStStatusVisible()throws Exception{
-        FakeShell shell=new FakeShell("10");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},4);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertFalse(events.contains("transport_fallback"));assertTrue(events.contains("transport_start_error"));
+    }
+    FakeShell interfaceShell(String status,String chip)throws Exception{
+        FakeShell shell=new FakeShell("11");shell.capabilityFixture=new JSONObject().put("route","standard_reader").put("vendor_ready",false)
+            .put("support_status",status).put("chip",chip).put("firmware","fixture-fw").put("source","INfcAdapter")
+            .put("raw_vendor_api",!status.equals("missing_interfaces")).put("reader_api",true)
+            .put("missing_interfaces",new org.json.JSONArray(status.equals("missing_interfaces")?"[\"厂商 NFC 指令接口\"]":"[]"))
+            .put("interface_inventory",new JSONObject().put("class","fixture.INfcAdapter").put("signatures",new org.json.JSONArray().put("void setReaderMode(IBinder,IAppCallback,int,Bundle)")))
+            .put("reason",status.equals("missing_interfaces")?"未检测到厂商 NFC 指令接口":"控制器接口已发现，当前尚未确认专用适配").toString();
+        field(NfcTestActivity.class,"remote").set(app,shell);return shell;
+    }
+    JSONObject feedback()throws Exception{
+        SessionLog s=(SessionLog)get("session");return new JSONObject(new String(Files.readAllBytes(new File(s.dir,"compatibility-feedback.json").toPath()),java.nio.charset.StandardCharsets.UTF_8));
+    }
+    static boolean contains(android.view.View v,String text){
+        if(v instanceof TextView&&((TextView)v).getText().toString().contains(text))return true;
+        if(v instanceof android.view.ViewGroup){android.view.ViewGroup g=(android.view.ViewGroup)v;for(int i=0;i<g.getChildCount();i++)if(contains(g.getChildAt(i),text))return true;}return false;
+    }
+    @Test public void missingInterfaceShowsNoticeAndExportsUsableFeedbackZip()throws Exception{
+        FakeShell shell=interfaceShell("missing_interfaces","NXP");invoke("begin",new Class<?>[]{int.class},2);settle();
+        AlertDialog dialog=(AlertDialog)get("compatibilityNotice");assertNotNull(dialog);assertTrue(dialog.isShowing());
+        assertTrue(contains(dialog.getWindow().getDecorView(),"系统缺少专用 NFC 接口"));assertTrue(contains(dialog.getWindow().getDecorView(),"厂商 NFC 指令接口"));
+        assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);
+        JSONObject data=feedback();assertEquals(1,data.getInt("schema_version"));assertEquals("preflight",data.getString("stage"));
+        assertTrue(data.getJSONObject("device").has("fingerprint"));assertTrue(data.getJSONObject("permissions").getBoolean("shell_connected"));
+        assertEquals("missing_interfaces",data.getJSONObject("compatibility").getString("support_status"));assertTrue(data.getJSONObject("compatibility").getJSONObject("interface_inventory").getJSONArray("signatures").getString(0).contains("setReaderMode"));
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).performClick();settle();
+        File zip=(File)get("pendingExport");assertNotNull(zip);assertFalse(nfc.isInReaderMode());
+        try(java.util.zip.ZipFile archive=new java.util.zip.ZipFile(zip)){
+            assertTrue(archive.stream().anyMatch(e->e.getName().endsWith("/compatibility-feedback.json")));
+            assertTrue(archive.stream().anyMatch(e->e.getName().endsWith("/environment.json")));
+            assertTrue(archive.stream().anyMatch(e->e.getName().endsWith("/events.jsonl")));
+        }
+    }
+    @Test public void exposedButUnadaptedControllerHasDifferentNotice()throws Exception{
+        FakeShell shell=interfaceShell("unadapted_controller","ST54T");invoke("begin",new Class<?>[]{int.class},2);settle();
+        AlertDialog dialog=(AlertDialog)get("compatibilityNotice");assertNotNull(dialog);assertTrue(contains(dialog.getWindow().getDecorView(),"检测到接口，暂未确认适配"));
+        assertFalse(contains(dialog.getWindow().getDecorView(),"系统缺少专用 NFC 接口"));assertEquals(0,shell.vendorStarts);assertTrue(nfc.isInReaderMode());
+        assertEquals("ST54T",feedback().getJSONObject("compatibility").getString("chip"));
+    }
+    @Test public void noShellMeansNotCheckedAndDoesNotClaimMissingInterfaces()throws Exception{
+        invoke("begin",new Class<?>[]{int.class},2);settle();assertNull(get("compatibilityNotice"));
+        assertEquals("not_checked",feedback().getJSONObject("compatibility").getString("support_status"));
+    }
+    @Test public void deniedProbeIsRecordedAsFailureNotUnsupported()throws Exception{
+        FakeShell shell=new FakeShell("11");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        invoke("begin",new Class<?>[]{int.class},2);settle();assertNull(get("compatibilityNotice"));assertEquals(0,shell.vendorStarts);
+        JSONObject report=feedback().getJSONObject("compatibility");assertEquals("probe_failed",report.getString("support_status"));assertTrue(report.getString("probe_error").contains("SecurityException"));
+    }
+    @Test public void disabledExperimentIsNotReportedAsMissingInterface()throws Exception{
+        interfaceShell("experiment_disabled","ST54L");invoke("begin",new Class<?>[]{int.class},2);settle();assertNull(get("compatibilityNotice"));
+        assertEquals("experiment_disabled",feedback().getJSONObject("compatibility").getString("support_status"));
+    }
+    @Test public void explicitStandardModeDoesNotProbeOrShowVendorNotice()throws Exception{
+        FakeShell shell=interfaceShell("missing_interfaces","NXP");app.getSharedPreferences("nfc_compat",0).edit().putBoolean("standard_only",true).commit();
+        invoke("begin",new Class<?>[]{int.class},2);settle();assertNull(get("compatibilityNotice"));assertEquals(0,shell.preflights);assertEquals(0,shell.vendorStarts);assertTrue(nfc.isInReaderMode());
+    }
+    @Test public void manualCompatibilityIncludesFeedbackActionWithoutStartingReader()throws Exception{
+        interfaceShell("unadapted_controller","ST54T");invoke("checkCompatibility",new Class<?>[0]);settle();
+        AlertDialog dialog=(AlertDialog)get("compatibilityNotice");assertNotNull(dialog);assertEquals("导出适配反馈",dialog.getButton(AlertDialog.BUTTON_NEUTRAL).getText().toString());
+        assertEquals("manual_check",feedback().getString("stage"));assertFalse(nfc.isInReaderMode());
+        SessionLog s=(SessionLog)get("session");assertTrue(new File(s.dir,"vendor-info.json").isFile());
+    }
+    @Test public void noticeIsDismissedWhenPageLeavesForeground()throws Exception{
+        interfaceShell("missing_interfaces","NXP");invoke("begin",new Class<?>[]{int.class},2);settle();AlertDialog dialog=(AlertDialog)get("compatibilityNotice");assertNotNull(dialog);
+        controller.pause();paused=true;settle();assertFalse(dialog.isShowing());assertNull(get("compatibilityNotice"));
     }
 }
