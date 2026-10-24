@@ -7,3 +7,6 @@
 *.aar binary
 *.rgb binary
 *.codes binary
+tests/einkwarm-fixtures/*.idx binary
+tests/einkwarm-fixtures/*.json text eol=lf
+tests/einkwarm-fixtures/*.tsv text eol=lf

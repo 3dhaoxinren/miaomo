@@ -4,11 +4,14 @@ configurations { androidAars }
 def sdk = System.getenv('ANDROID_SDK_ROOT') ?: System.getenv('ANDROID_HOME')
 if (!sdk) throw new GradleException('Set ANDROID_SDK_ROOT or ANDROID_HOME')
 def androidJar = file("${sdk}/platforms/android-35/android.jar")
+def nativeRuntime = System.getenv('MIAOMO_ROBOLECTRIC_NATIVE_RUNTIME')
+if (nativeRuntime && !file(nativeRuntime).isFile()) throw new GradleException('MIAOMO_ROBOLECTRIC_NATIVE_RUNTIME must name a runtime JAR')
 sourceSets.main.java.srcDirs = ['../../src']
 sourceSets.main.java.include 'dev/inknfclab/*.java'
-sourceSets.main.java.exclude 'dev/inknfclab/PicturePanel.java','dev/inknfclab/PhotoEditor.java','dev/inknfclab/DiagnosticService.java','dev/inknfclab/LogExportProvider.java'
+sourceSets.main.java.exclude 'dev/inknfclab/DiagnosticService.java','dev/inknfclab/LogExportProvider.java'
 sourceSets.test.java.srcDirs = ['.']
 sourceSets.test.java.include '**/*Test.java'
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 dependencies {
     compileOnly files(androidJar)
     implementation files('../../build/classes.jar')
@@ -21,8 +24,9 @@ dependencies {
     testImplementation('org.robolectric:robolectric:4.16') {
         exclude group: 'androidx.test', module: 'monitor'
         exclude group: 'androidx.test.espresso', module: 'espresso-idling-resource'
-        exclude group: 'org.robolectric', module: 'nativeruntime-dist-compat'
+        if (nativeRuntime) exclude group: 'org.robolectric', module: 'nativeruntime-dist-compat'
     }
+    if (nativeRuntime) testRuntimeOnly files(nativeRuntime)
     androidAars 'androidx.test:monitor:1.8.0@aar'
     androidAars 'androidx.test.espresso:espresso-idling-resource:3.7.0@aar'
     testRuntimeOnly fileTree(layout.buildDirectory.dir('aar-jars')) { include '*.jar' }

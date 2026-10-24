@@ -10,6 +10,7 @@ import android.widget.*;
 final class PhotoEditor extends View {
     interface Done{void apply(PhotoEdit edit);}
     private final Bitmap source;private PhotoEdit edit;
+    private Bitmap colorPreview;
     private final Paint paint=new Paint(3);private final RectF frame=new RectF();
     private final ScaleGestureDetector scale;private final EditHistory history=new EditHistory();
     private float lastX,lastY;private boolean recorded,textMode;private int selected=-1;
@@ -28,9 +29,10 @@ final class PhotoEditor extends View {
     @Override protected void onDraw(Canvas canvas){
         canvas.drawColor(AppUi.DARK);float margin=AppUi.dp(getContext(),26),w=Math.max(1,getWidth()-2*margin),h=Math.max(1,getHeight()-2*margin),ratio=(float)edit.width()/edit.height();if(w/h>ratio)w=h*ratio;else h=w/ratio;
         frame.set((getWidth()-w)/2,(getHeight()-h)/2,(getWidth()+w)/2,(getHeight()+h)/2);paint.setColor(Color.WHITE);canvas.drawRect(frame,paint);
+        if(colorPreview!=null&&!textMode){canvas.drawBitmap(colorPreview,null,frame,paint);}else{
         canvas.save();canvas.clipRect(frame);float rw=edit.rotation%180==0?source.getWidth():source.getHeight(),rh=edit.rotation%180==0?source.getHeight():source.getWidth(),s=baseScale();float px=Math.max(0,(rw*s-w)/2),py=Math.max(0,(rh*s-h)/2);
         canvas.save();canvas.translate(frame.centerX()+(float)edit.offsetX*px,frame.centerY()+(float)edit.offsetY*py);canvas.rotate(edit.rotation);canvas.scale(s,s);canvas.scale(edit.mirror?-1:1,1);canvas.drawBitmap(source,-source.getWidth()/2f,-source.getHeight()/2f,paint);canvas.restore();
-        canvas.translate(frame.left,frame.top);canvas.scale(w/edit.width(),h/edit.height());PhotoDecorations.draw(canvas,edit,edit.width(),edit.height(),textMode?selected:-1,true);canvas.restore();
+        canvas.translate(frame.left,frame.top);canvas.scale(w/edit.width(),h/edit.height());PhotoDecorations.draw(canvas,edit,edit.width(),edit.height(),textMode?selected:-1,true);canvas.restore();}
         paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(AppUi.dp(getContext(),1));paint.setColor(0x55ffffff);
         if(!textMode&&recorded)for(int i=1;i<3;i++){float x=frame.left+w*i/3,y=frame.top+h*i/3;canvas.drawLine(x,frame.top,x,frame.bottom,paint);canvas.drawLine(frame.left,y,frame.right,y,paint);}paint.setColor(0xff525459);canvas.drawRect(frame,paint);paint.setStyle(Paint.Style.FILL);
     }
@@ -50,6 +52,9 @@ final class PhotoEditor extends View {
     static Dialog open(Activity activity,Bitmap bitmap,PhotoEdit original,Done done){return open(activity,bitmap,original,0,done);}
     static Dialog open(Activity activity,Bitmap bitmap,PhotoEdit original,int tab,Done done){return new Session(activity,bitmap,original,tab,done).open();}
     private static final class Session {
+        final java.util.concurrent.ExecutorService renders=java.util.concurrent.Executors.newSingleThreadExecutor();
+        final android.os.Handler previewMain=new android.os.Handler(android.os.Looper.getMainLooper());
+        java.util.concurrent.Future<?> renderTask;Runnable renderStart;int renderGeneration;boolean released;
         final Activity activity;final Dialog dialog;final PhotoEditor canvas;final LinearLayout tools;final View undo,redo;final TextView hint;final LinearLayout navigation;final ScrollView toolScroll;int mode;
         Session(Activity a,Bitmap bitmap,PhotoEdit original,int initialTab,Done done){
             activity=a;mode=initialTab;dialog=new Dialog(a);canvas=new PhotoEditor(a,bitmap,original.copy());LinearLayout page=AppUi.column(a);page.setBackgroundColor(AppUi.DARK);
@@ -66,18 +71,38 @@ final class PhotoEditor extends View {
             View separator=new View(a);separator.setBackgroundColor(0xff303135);bottom.addView(separator,new LinearLayout.LayoutParams(-1,AppUi.dp(a,.5f)));navigation=new LinearLayout(a);bottom.addView(navigation);page.addView(bottom);
             page.setOnApplyWindowInsetsListener((v,insets)->{page.setPadding(0,insets.getSystemWindowInsetTop(),0,insets.getSystemWindowInsetBottom());return insets;});
             dialog.setContentView(page);Window window=dialog.getWindow();if(window!=null){window.setBackgroundDrawableResource(android.R.color.transparent);window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);window.setStatusBarColor(AppUi.DARK);window.setNavigationBarColor(AppUi.PANEL);}
-            canvas.changed=()->{undo.setEnabled(canvas.history.canUndo());redo.setEnabled(canvas.history.canRedo());undo.setAlpha(canvas.history.canUndo()?1:.3f);redo.setAlpha(canvas.history.canRedo()?1:.3f);};canvas.selectionChanged=()->{if(mode==1)showTools();};showTools();
+            canvas.addOnAttachStateChangeListener(new OnAttachStateChangeListener(){public void onViewAttachedToWindow(View view){}public void onViewDetachedFromWindow(View view){releasePreview();}});
+            canvas.changed=()->{undo.setEnabled(canvas.history.canUndo());redo.setEnabled(canvas.history.canRedo());undo.setAlpha(canvas.history.canUndo()?1:.3f);redo.setAlpha(canvas.history.canRedo()?1:.3f);requestPreview();};canvas.selectionChanged=()->{if(mode==1)showTools();};showTools();
+        }
+        void releasePreview(){released=true;renderGeneration++;if(renderStart!=null)previewMain.removeCallbacks(renderStart);renders.shutdownNow();if(canvas.colorPreview!=null){canvas.colorPreview.recycle();canvas.colorPreview=null;}}
+        void requestPreview(){
+            if(released)return;int token=++renderGeneration;PhotoEdit state=canvas.edit.copy();if(renderTask!=null)renderTask.cancel(true);if(renderStart!=null)previewMain.removeCallbacks(renderStart);
+            if(canvas.colorPreview!=null){canvas.colorPreview.recycle();canvas.colorPreview=null;}canvas.invalidate();
+            renderStart=()->{if(released||token!=renderGeneration)return;renderTask=renders.submit(()->{
+                ImageCodec.PreparedImage prepared=null;Bitmap result=null;
+                try{
+                    prepared=ImageCodec.prepareEdited(canvas.source,state);result=prepared.preview;
+                    if(state.landscape){Matrix turn=new Matrix();turn.postRotate(-90);result=Bitmap.createBitmap(result,0,0,result.getWidth(),result.getHeight(),turn,false);prepared.preview.recycle();}
+                    prepared.originalPreview.recycle();final Bitmap owned=result;
+                    previewMain.post(()->{if(released||token!=renderGeneration){owned.recycle();return;}canvas.colorPreview=owned;canvas.invalidate();});
+                }catch(Exception error){if(result!=null&&!result.isRecycled())result.recycle();if(prepared!=null&&!prepared.originalPreview.isRecycled())prepared.originalPreview.recycle();}
+            });};previewMain.postDelayed(renderStart,80);
         }
         Dialog open(){dialog.show();Window w=dialog.getWindow();if(w!=null){w.setLayout(-1,-1);w.getDecorView().setSystemUiVisibility(0);}return dialog;}
         void change(Runnable action){canvas.mutate(action);showTools();}
         void showTools(){
-            tools.removeAllViews();navigation.removeAllViews();canvas.textMode=mode==1;String[] labels={"构图","文字","相框"},icons={"crop","text","frame"};for(int i=0;i<3;i++){final int index=i;navigation.addView(UiIcon.tool(activity,icons[i],labels[i],mode==i,true,()->{mode=index;showTools();}),new LinearLayout.LayoutParams(0,AppUi.dp(activity,61),1));}
-            hint.setText(mode==0?"拖动调整位置 · 双指缩放":mode==1?"点选文字 · 拖动位置 · 双指缩放":"选择一种留白方式");canvas.changed.run();canvas.invalidate();
-            if(mode==0)cropTools();else if(mode==1)textTools();else frameTools();
+            tools.removeAllViews();navigation.removeAllViews();canvas.textMode=mode==1;String[] labels={"构图","文字","相框","滤镜"},icons={"crop","text","frame","image"};for(int i=0;i<4;i++){final int index=i;navigation.addView(UiIcon.tool(activity,icons[i],labels[i],mode==i,true,()->{mode=index;showTools();}),new LinearLayout.LayoutParams(0,AppUi.dp(activity,61),1));}
+            hint.setText(mode==0?"拖动调整位置 · 双指缩放":mode==1?"点选文字 · 拖动位置 · 双指缩放":mode==2?"选择一种留白方式":"选择配色，预览墨水屏效果");canvas.changed.run();canvas.invalidate();
+            if(mode==0)cropTools();else if(mode==1)textTools();else if(mode==2)frameTools();else filterTools();
         }
-        Button control(String text,boolean selected,Runnable action){return AppUi.darkButton(activity,text,selected,action);}
+        Button control(String text,boolean selected,Runnable action){Button button=AppUi.darkButton(activity,text,selected,action);button.setSelected(selected);if(android.os.Build.VERSION.SDK_INT>=30)button.setStateDescription(selected?"已选择":"未选择");return button;}
         LinearLayout compactRow(){LinearLayout row=new LinearLayout(activity);row.setGravity(Gravity.CENTER_VERTICAL);return row;}
         void addControl(LinearLayout row,View view){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,AppUi.dp(activity,35),1);lp.setMargins(AppUi.dp(activity,3),0,AppUi.dp(activity,3),0);row.addView(view,lp);}
+        void filterTools(){
+            PhotoEdit state=canvas.edit;LinearLayout row=compactRow();
+            addControl(row,control("经典四色",PhotoEdit.CLASSIC.equals(state.colorProfile),()->change(()->state.colorProfile=PhotoEdit.CLASSIC)));
+            addControl(row,control("自然暖调",PhotoEdit.EINKWARM.equals(state.colorProfile),()->change(()->state.colorProfile=PhotoEdit.EINKWARM)));tools.addView(row);
+        }
         void cropTools(){
             PhotoEdit e=canvas.edit;LinearLayout row=compactRow();
             addControl(row,control("竖向",!e.landscape,()->change(()->{e.landscape=false;e.offsetX=e.offsetY=0;})));addControl(row,control("横向",e.landscape,()->change(()->{e.landscape=true;e.offsetX=e.offsetY=0;})));addControl(row,control(e.cover?"填满":"完整",false,()->change(()->{e.cover=!e.cover;e.offsetX=e.offsetY=0;})));tools.addView(row);AppUi.gap(tools,12);

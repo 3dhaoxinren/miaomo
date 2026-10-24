@@ -12,3 +12,7 @@ See THIRD-PARTY-LICENSES.txt for dependency license texts.
 InkSight photo enhancement, palette and Atkinson algorithm adapted from datascale-ai/inksight (MIT, Copyright (c) 2026 datascale-ai).
 Pillow-compatible enhancement and Lanczos implementation adapted from Pillow 10.1.0 algorithms (HPND; see THIRD-PARTY-LICENSES.txt).
 Synthetic reference fixtures and source hashes: tests/inksight-fixtures/reference.json.
+
+Natural warm photo color model reference: atunverse/moink, commit 081af81ec05c6a66f9fe6d5f598bcf229eff8723.
+https://github.com/atunverse/moink
+EinkWarmQuantizer is an independent implementation of the numerical model; upstream source code is not incorporated.

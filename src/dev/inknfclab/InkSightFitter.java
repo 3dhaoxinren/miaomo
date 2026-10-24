@@ -6,6 +6,9 @@ public strictfp final class InkSightFitter {
         return fit(pixels,width,height,targetWidth,targetHeight,cover,1,0,0);
     }
     static int[] fit(int[] pixels,int width,int height,int targetWidth,int targetHeight,boolean cover,double zoom,double offsetX,double offsetY) {
+        return fit(pixels,width,height,targetWidth,targetHeight,cover,zoom,offsetX,offsetY,false);
+    }
+    static int[] fit(int[] pixels,int width,int height,int targetWidth,int targetHeight,boolean cover,double zoom,double offsetX,double offsetY,boolean preservePalette) {
         if(pixels==null||width<1||height<1||(long)width*height!=pixels.length||targetWidth<1||targetHeight<1)throw new IllegalArgumentException("无效裁切尺寸");
         double scale=cover ? Math.max((double)targetWidth/width,(double)targetHeight/height) : Math.min((double)targetWidth/width,(double)targetHeight/height);
         scale*=PhotoEdit.clamp(zoom,1,4);
@@ -18,13 +21,24 @@ public strictfp final class InkSightFitter {
             for(int c=0;c<3;c++){int shift=16-8*c,value=(color>>>shift)&255;result|=((value*alpha+255*(255-alpha)+127)/255)<<shift;}
             opaque[i]=result;
         }
-        int[] scaled=resize(opaque,width,height,resizedWidth,resizedHeight);
+        int[] scaled=preservePalette&&EinkWarmQuantizer.isPaletteImage(opaque,width,height)
+                ? resizeNearest(opaque,width,height,resizedWidth,resizedHeight) : resize(opaque,width,height,resizedWidth,resizedHeight);
         int[] result=new int[targetWidth*targetHeight];java.util.Arrays.fill(result,0xffffffff);
         int ox=Math.floorDiv(targetWidth-resizedWidth,2)+(int)Math.round(PhotoEdit.clamp(offsetX,-1,1)*Math.max(0,(resizedWidth-targetWidth)/2.0));
         int oy=Math.floorDiv(targetHeight-resizedHeight,2)+(int)Math.round(PhotoEdit.clamp(offsetY,-1,1)*Math.max(0,(resizedHeight-targetHeight)/2.0));
         for(int y=Math.max(0,oy);y<Math.min(targetHeight,oy+resizedHeight);y++)
             for(int x=Math.max(0,ox);x<Math.min(targetWidth,ox+resizedWidth);x++)result[y*targetWidth+x]=scaled[(y-oy)*resizedWidth+x-ox];
         return result;
+    }
+    private static int[] resizeNearest(int[] source,int width,int height,int targetWidth,int targetHeight) {
+        int[] output=new int[targetWidth*targetHeight];
+        for(int y=0;y<targetHeight;y++) {
+            checkCancelled();int sy=Math.min(height-1,(int)((y+.5)*height/targetHeight));
+            for(int x=0;x<targetWidth;x++){
+                int sx=Math.min(width-1,(int)((x+.5)*width/targetWidth));output[y*targetWidth+x]=source[sy*width+sx];
+            }
+        }
+        return output;
     }
     private static int[] resize(int[] source,int w,int h,int tw,int th) {
         int[] horizontal=source;
