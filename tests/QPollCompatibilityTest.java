@@ -46,6 +46,10 @@ public final class QPollCompatibilityTest {
         rejects(NoRawSendApi.class,true,16,"vendor NCI");
         rejects(NoReaderApi.class,true,16,"reader-mode");
         rejects(WrongReaderModeSignature.class,true,16,"reader-mode");
-        System.out.println("PASS QPollCompatibilityTest checks=7: positive NXP profile, opt-in RF readback fallback and exact Binder contracts");
+        require(ServiceIdentity.supported(0));
+        require(ServiceIdentity.supported(2000));
+        require(!ServiceIdentity.supported(1000));
+        require(ServiceIdentity.kind(2000).equals("shell"));
+        System.out.println("PASS QPollCompatibilityTest checks=11: positive NXP profile, opt-in RF readback fallback, exact Binder contracts and service identities");
     }
 }

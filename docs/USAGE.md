@@ -6,7 +6,7 @@
 
 需要 Android 8.0 以上手机、手机内置 NFC，以及保留原 NFC 主控和线圈的华为 3.98 英寸四色墨水屏。小米 15 Pro / Android 16 已确认 ST54L (`02.04.1188`)；旧 ST `0x15` 读帧返回 `0B`（参考 ST 源码为不支持）。0.5.8 新增原生读帧通道，但手机端尚未成功寻卡或刷新。
 
-1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.10.apk`。
+1. 打开本仓库 [Releases](https://github.com/3dhaoxinren/miaomo/releases)，下载安装 `miaomo-0.5.11.apk`。
 2. 如需专用寻卡，按 [Shizuku 官方指南](https://shizuku.rikka.app/zh-hans/guide/setup/) 启动 Shizuku。支持无线调试的系统可按指南配对启动，也可使用电脑 ADB 启动；这里不需要 root。
 3. 开启手机 NFC，打开喵墨。无需填写服务器地址或 API Key。照片处理在本地完成；检查更新时才读取 GitHub 公开发布信息。
 

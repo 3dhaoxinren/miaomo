@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 public final class DiagnosticService extends Binder {
     static final String DESCRIPTOR = "dev.inknfclab.test.Diagnostics.v1";
     static final int INFO=1, START=2, DRAIN=3, STOP=4, SNAPSHOT=5;
-    static final int Q_START=6, Q_STATUS=7, Q_CONNECT=8, Q_TRANSCEIVE=9, Q_TIMEOUT=10, Q_STOP=11, SERVICE_VERSION=12, CAPABILITIES=13;
+    static final int Q_START=6, Q_STATUS=7, Q_CONNECT=8, Q_TRANSCEIVE=9, Q_TIMEOUT=10, Q_STOP=11, SERVICE_VERSION=12, CAPABILITIES=13, SERVICE_UID=14;
     private final ArrayDeque<String> lines = new ArrayDeque<>();
     private java.lang.Process logcat;
     private int buffered;
@@ -24,7 +24,8 @@ public final class DiagnosticService extends Binder {
         if (code == INTERFACE_TRANSACTION) { reply.writeString(DESCRIPTOR); return true; }
         if (code == 16777115) { stop(); new Thread(() -> { try { Thread.sleep(150); } catch(Exception ignored) {} System.exit(0); }).start(); if(reply != null) reply.writeNoException(); return true; }
         data.enforceInterface(DESCRIPTOR);
-        if (android.os.Process.myUid() != 2000) throw new SecurityException("Only Shizuku shell UID 2000 supported");
+        int uid=android.os.Process.myUid();
+        if (!ServiceIdentity.supported(uid)) throw new SecurityException("Unsupported Shizuku service UID "+uid);
         if(code==Q_TRANSCEIVE) {
             try { byte[] response=qpoll.transceive(data.createByteArray()); reply.writeNoException();reply.writeInt(1);reply.writeByteArray(response); }
             catch(Throwable e) {reply.writeNoException();reply.writeInt(0);reply.writeString(android.util.Log.getStackTraceString(e));}
@@ -38,7 +39,8 @@ public final class DiagnosticService extends Binder {
                 case DRAIN: result=drain(); break;
                 case STOP: result=stop(); break;
                 case SNAPSHOT: result=command(new String[]{"/system/bin/dumpsys","nfc"}, 10000); break;
-                case SERVICE_VERSION: result="11";break;
+                case SERVICE_VERSION: result="12";break;
+                case SERVICE_UID: result=Integer.toString(android.os.Process.myUid());break;
                 case CAPABILITIES: result=NfcControllerProbe.capabilities(data.readInt()!=0,data.readInt()!=0).toString();break;
                 case Q_START: result=qpoll.start(data.readStrongBinder(),data.readInt()!=0,data.readInt()!=0);break;
                 case Q_STATUS: result=qpoll.status();break;
@@ -84,7 +86,7 @@ public final class DiagnosticService extends Binder {
         return inventory;
     }
     private String info() throws Exception {
-        JSONObject out=new JSONObject().put("uid",android.os.Process.myUid()).put("scope","read-only getters").put("manufacturer",Build.MANUFACTURER).put("model",Build.MODEL).put("device",Build.DEVICE).put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("display",Build.DISPLAY).put("diagnostic_service_version","11");
+        JSONObject out=new JSONObject().put("uid",android.os.Process.myUid()).put("scope","read-only getters").put("manufacturer",Build.MANUFACTURER).put("model",Build.MODEL).put("device",Build.DEVICE).put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("display",Build.DISPLAY).put("diagnostic_service_version","12");
         try {
             IBinder binder=(IBinder)service("mi_nfc");
             out.put("mi_descriptor",binder==null ? "null" : binder.getInterfaceDescriptor());

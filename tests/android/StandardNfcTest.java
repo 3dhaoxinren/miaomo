@@ -99,7 +99,7 @@ public class StandardNfcTest {
         }
     }
     @Test public void unknownVendorPreflightFallsBackWithoutVendorStart()throws Exception{
-        FakeShell shell=new FakeShell("11");field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("12");field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);
     }
     @Test public void staleShellServiceFallsBackBeforeVendorTransportStarts()throws Exception{
@@ -107,15 +107,15 @@ public class StandardNfcTest {
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));assertTrue(((TextView)get("compatibilityStatus")).getText().toString().contains("版本较旧"));
     }
     @Test public void deniedReadOnlyPreflightCanStillUseStandardReader()throws Exception{
-        FakeShell shell=new FakeShell("11");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("12");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(0,shell.vendorStarts);
     }
     @Test public void vendorStartFailureNeverSwitchesToStandardWhileCleanupIsPending()throws Exception{
-        FakeShell shell=new FakeShell("11");shell.vendorReady=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("12");shell.vendorReady=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
     }
     @Test public void rejectedReadOnlyStQueryFallsBackOnlyAfterCleanRollbackState()throws Exception{
-        FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("12");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue("failure detail retained",events.contains("st_vendor_read_rejected"));
@@ -123,19 +123,19 @@ public class StandardNfcTest {
         assertTrue("standard reader selected",events.contains("transport_selected"));
     }
     @Test public void rejectedStQueryDoesNotFallbackWhenCleanupCannotConfirmPristineState()throws Exception{
-        FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;shell.stConfigurationUncertain=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("12");shell.vendorReady=true;shell.stQueryRejected=true;shell.stConfigurationUncertain=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(events.contains("st_fallback_blocked"));assertFalse(events.contains("transport_fallback"));
     }
     @Test public void photoPushFallsBackAfterRejectedStReadWithoutUploadingUntilTag()throws Exception{
-        supplyTestFrame();FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        supplyTestFrame();FakeShell shell=new FakeShell("12");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},3);settle();assertTrue(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertEquals(Boolean.FALSE,get("qSession"));
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(events.contains("transport_fallback"));assertFalse(events.contains("apdu_tx"));assertFalse(events.contains("image_transfer_started"));
     }
     @Test public void fallbackKeepsTheControllerStatusInItsOwnEvent()throws Exception{
-        FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("12");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertTrue(nfc.isInReaderMode());
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         boolean status=false,fallback=false;
@@ -147,13 +147,13 @@ public class StandardNfcTest {
         assertTrue(status);assertTrue(fallback);
     }
     @Test public void explicitQPollDiagnosticKeepsRejectedStStatusVisible()throws Exception{
-        FakeShell shell=new FakeShell("11");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("12");shell.vendorReady=true;shell.stQueryRejected=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},4);settle();assertFalse(nfc.isInReaderMode());assertEquals(1,shell.vendorStarts);assertFalse((Boolean)get("active"));
         SessionLog log=(SessionLog)get("session");String events=new String(java.nio.file.Files.readAllBytes(new java.io.File(log.dir,"events.jsonl").toPath()),java.nio.charset.StandardCharsets.UTF_8);
         assertFalse(events.contains("transport_fallback"));assertTrue(events.contains("transport_start_error"));
     }
     FakeShell interfaceShell(String status,String chip)throws Exception{
-        FakeShell shell=new FakeShell("11");shell.capabilityFixture=new JSONObject().put("route","standard_reader").put("vendor_ready",false)
+        FakeShell shell=new FakeShell("12");shell.capabilityFixture=new JSONObject().put("route","standard_reader").put("vendor_ready",false)
             .put("support_status",status).put("chip",chip).put("firmware","fixture-fw").put("source","INfcAdapter")
             .put("raw_vendor_api",!status.equals("missing_interfaces")).put("reader_api",true)
             .put("missing_interfaces",new org.json.JSONArray(status.equals("missing_interfaces")?"[\"厂商 NFC 指令接口\"]":"[]"))
@@ -195,7 +195,7 @@ public class StandardNfcTest {
         assertEquals("not_checked",feedback().getJSONObject("compatibility").getString("support_status"));
     }
     @Test public void deniedProbeIsRecordedAsFailureNotUnsupported()throws Exception{
-        FakeShell shell=new FakeShell("11");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
+        FakeShell shell=new FakeShell("12");shell.denyPreflight=true;field(NfcTestActivity.class,"remote").set(app,shell);
         invoke("begin",new Class<?>[]{int.class},2);settle();assertNull(get("compatibilityNotice"));assertEquals(0,shell.vendorStarts);
         JSONObject report=feedback().getJSONObject("compatibility");assertEquals("probe_failed",report.getString("support_status"));assertTrue(report.getString("probe_error").contains("SecurityException"));
     }

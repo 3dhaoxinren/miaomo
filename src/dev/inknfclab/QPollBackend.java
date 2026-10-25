@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.lang.reflect.*;
 import java.util.*;
 
-/** Shell UID 2000 owns reader, callback and IsoDep; no root or NFC config files. */
+/** The isolated root/shell service owns reader, callback and IsoDep; no NFC config files. */
 final class QPollBackend {
     interface Listener { void event(String name,String value); }
     private final Listener listener;
@@ -68,13 +68,15 @@ final class QPollBackend {
     private void reader(int flags) throws Exception {
         Bundle extras=new Bundle();extras.putInt("presence",5000);
         Method method=readerMethod();
-        Object[] args=method.getParameterTypes().length==5?new Object[]{readerToken,callback,flags,extras,"com.android.shell"}:new Object[]{readerToken,callback,flags,extras};
+        String ownerPackage=android.os.Process.myUid()==2000 ? "com.android.shell" : "android";
+        Object[] args=method.getParameterTypes().length==5?new Object[]{readerToken,callback,flags,extras,ownerPackage}:new Object[]{readerToken,callback,flags,extras};
         try{method.invoke(adapter,args);}catch(InvocationTargetException e){Throwable failure=e.getTargetException();if(failure instanceof Exception)throw (Exception)failure;throw e;}
     }
     synchronized String start(IBinder caller,boolean allowUnverifiedSnapshot,boolean allowSt54l) throws Exception {
         if(running || qTouched || readerTouched || stSession!=null || stRestoreFailed) throw new IllegalStateException("Q-Poll session already active; stop it first");
         if(caller==null)throw new IllegalArgumentException("Caller lifecycle binder is required");
-        if(android.os.Process.myUid()!=2000) throw new SecurityException("Q-Poll requires Shizuku shell UID 2000");
+        int uid=android.os.Process.myUid();
+        if(!ServiceIdentity.supported(uid)) throw new SecurityException("Q-Poll requires a supported Shizuku service UID");
         controllerProfile="unselected";stConfigured=false;tag=null;iso=null;tagTaken=false;qSent=false;qAccepted=false;rfSnapshotAvailable=false;before="";after="";error="";restore="pending";
         Object service=Class.forName("android.os.ServiceManager").getMethod("getService",String.class).invoke(null,"nfc");
         if(service==null) throw new IOException("NFC 服务不可用");
@@ -132,7 +134,7 @@ final class QPollBackend {
                 qTouched=true;int result=qtag(1);event("qtag_on_api",String.valueOf(result));
                 if(result!=0)throw new IOException("系统拒绝 QTag，API="+result);
             }
-            readerTouched=true;reader(0x81);event("reader_on","shell UID 2000, flags=0x81");
+            readerTouched=true;reader(0x81);event("reader_on",ServiceIdentity.kind(uid)+" UID "+uid+", flags=0x81");
             timer.postDelayed(() -> { if(generation==run && running && tag==null) stop("60s_no_tag"); },60000);
             timer.postDelayed(() -> { if(generation==run && running) stop("300s_hard_deadline"); },300000);
             return status();

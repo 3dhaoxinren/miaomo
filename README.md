@@ -4,7 +4,7 @@
 
 把喜欢的照片放进墨水屏。面向华为 3.98 英寸、552×768 四色 NFC 墨水屏的 Android 照片编辑与推图 App，使用手机内置 NFC；标准通道无需 Shizuku，专用寻卡通道使用 Shizuku，无需 root。
 
-当前版本 **0.5.10-test**，Android 8.0+。新增「经典四色 / 自然暖调」照片滤镜及即时四色预览。ST54L 原生通道仍需小米 15 Pro 实测确认，接口存在不代表已能寻卡或刷新。
+当前版本 **0.5.11-test**，Android 8.0+。修复 SUI/Shizuku 用户服务在绑定前查询身份与最终隔离服务 UID 不一致时的启动死锁；连接后再验证实际服务身份，仅接受 root 或 shell 进程。ST54L 原生通道仍需小米 15 Pro 实测确认，接口存在不代表已能寻卡或刷新。
 
 > **复杂照片 / 细密抖动的稳定刷图条件：对齐线圈，保持供电。**
 > 先对齐手机与屏幕的 NFC 线圈并全程贴稳；手机 NFC 供能不足、出现 `68CA` 时，可使用经过核对的 **3.3V 辅助供电**改善稳定性。外接电源只补充供能，仍须保持 NFC 对齐通信，直到屏幕刷新完成。具体接法见 [3.3V 供电说明](docs/POWER_3V3.md)。
@@ -97,7 +97,7 @@ python3 test_images.py
 python3 build.py
 ```
 
-输出 `build/miaomo-0.5.10.apk`。首次构建在 `build/` 创建本地调试签名，私钥不入库。GitHub Actions 配置了协议、图像、照片滤镜、更新和 NFC 兼容性测试、构建和 APK 附件上传；运行结果以 Actions 页面为准。
+输出 `build/miaomo-0.5.11.apk`。首次构建在 `build/` 创建本地调试签名，私钥不入库。GitHub Actions 配置了协议、图像、照片滤镜、更新和 NFC 兼容性测试、构建和 APK 附件上传；运行结果以 Actions 页面为准。
 
 如需沿用自己的已有调试签名，可通过环境变量 `MIAOMO_KEYSTORE` 指向本地 keystore；本构建脚本使用调试签名的标准口令，私钥不得提交。Android 更新界面、照片滤镜和 JSON 解析的回归需要 Gradle 8.7：先构建 APK，再运行 `gradle -p tests/android test`；首次运行会下载 Robolectric 及原生图形运行库，缓存设置见 DESIGN.md。
 

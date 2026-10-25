@@ -51,24 +51,41 @@ public final class NfcTestActivity extends Activity {
     private File pendingExport;
     private final StringBuilder screen=new StringBuilder();
         private final Shizuku.UserServiceArgs serviceArgs=new Shizuku.UserServiceArgs(new ComponentName("dev.inknfclab.test",DiagnosticService.class.getName()))
-        .daemon(false).processNameSuffix("nfc_diagnostics").version(11).debuggable(true);
+        .daemon(false).processNameSuffix("nfc_diagnostics").version(12).debuggable(true);
+    private volatile int serviceUid=-1;
     private final ServiceConnection serviceConnection=new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
-            binding=false; remote=binder; show("Shizuku 诊断服务已连接（shell）"); refresh();
-            if(smokeRequested && !smokeDone) runSmoke();
-            runDiagnosticIntent();
+            binding=false;serviceUid=-1;remote=binder;show("Shizuku 诊断服务已连接，正在验证实际身份");refresh();
+            work.execute(() -> {
+                try {
+                    int uid=Integer.parseInt(call(DiagnosticService.SERVICE_UID));
+                    if(!ServiceIdentity.supported(uid)) throw new SecurityException("诊断服务身份不受支持：UID "+uid);
+                    serviceUid=uid;
+                    main.post(() -> {
+                        show("Shizuku 诊断服务已连接（"+ServiceIdentity.kind(uid)+" / UID "+uid+"）");
+                        refresh();
+                        if(smokeRequested && !smokeDone) runSmoke();
+                        runDiagnosticIntent();
+                    });
+                } catch(Throwable failure) {
+                    remote=null;serviceUid=-1;
+                    try { Shizuku.unbindUserService(serviceArgs,serviceConnection,true); } catch(Throwable ignored) {}
+                    main.post(() -> { show("诊断服务身份验证失败："+failure); refresh(); });
+                }
+            });
         }
-        @Override public void onServiceDisconnected(ComponentName name) { remote=null; binding=false; show("Shizuku 诊断服务断开"); refresh(); }
+        @Override public void onServiceDisconnected(ComponentName name) { remote=null;serviceUid=-1;binding=false; show("Shizuku 诊断服务断开"); refresh(); }
     };
     private final Shizuku.OnBinderReceivedListener received=() -> main.post(() -> {
         refresh();
         try { if(Shizuku.checkSelfPermission()==PackageManager.PERMISSION_GRANTED || smokeRequested) connectShizuku(); } catch(Throwable e) { error("shizuku_received",e); }
     });
-    private final Shizuku.OnBinderDeadListener dead=() -> main.post(() -> { remote=null; binding=false; show("Shizuku 已停止，系统日志采集不可用"); refresh(); });
+    private final Shizuku.OnBinderDeadListener dead=() -> main.post(() -> { remote=null;serviceUid=-1;binding=false; show("Shizuku 已停止，系统日志采集不可用"); refresh(); });
     private final Shizuku.OnRequestPermissionResultListener permission=(code,result) -> main.post(() -> {
         show(result==PackageManager.PERMISSION_GRANTED ? "Shizuku 已授权" : "Shizuku 未授权，仍可普通寻卡");
         if(result==PackageManager.PERMISSION_GRANTED) bind(); refresh();
     });
+    private boolean hasVerifiedService(){return remote!=null && ServiceIdentity.supported(serviceUid);}
     private final Runnable poll=new Runnable() {
         @Override public void run() {
             SessionLog current=session;
@@ -158,7 +175,13 @@ public final class NfcTestActivity extends Activity {
     private void refresh() {
         if(state==null || destroyed) return;
         String shizuku="未运行";
-        try { if(Shizuku.pingBinder()) shizuku=remote!=null ? "已连接 / shell" : Shizuku.checkSelfPermission()==0 ? "已授权，待连接" : "待授权"; } catch(Throwable ignored) {}
+        try {
+            if(Shizuku.pingBinder()) {
+                if(remote!=null && serviceUid>=0) shizuku="已连接 / "+ServiceIdentity.kind(serviceUid)+" / UID "+serviceUid;
+                else if(remote!=null) shizuku="正在验证诊断服务身份";
+                else shizuku=Shizuku.checkSelfPermission()==0 ? "已授权，待连接" : "待授权";
+            }
+        } catch(Throwable ignored) {}
         if(deviceChip!=null)deviceChip.setText(active?"● 操作中":remote!=null&&adapter!=null&&adapter.isEnabled()?"● 已连接":"连接设备  ›");
         state.setText("NFC："+(adapter==null ? "不支持" : adapter.isEnabled() ? "已开启" : "已关闭")+"\nShizuku："+shizuku+"\n采集："+(active ? "进行中" : "已停止"));
     }
@@ -168,7 +191,6 @@ public final class NfcTestActivity extends Activity {
                 show("请在 Shizuku 中启动服务，再回到本页连接。");
                 Intent intent=getPackageManager().getLaunchIntentForPackage("moe.shizuku.privileged.api"); if(intent!=null) startActivity(intent); return;
             }
-            if(Shizuku.getUid()!=2000) { show("此测试包只支持以 shell（非 root）方式启动的 Shizuku。"); return; }
             if(Shizuku.checkSelfPermission()!=PackageManager.PERMISSION_GRANTED) Shizuku.requestPermission(101); else bind();
         } catch(Throwable e) { error("shizuku_connect_error",e); }
     }
@@ -188,7 +210,7 @@ public final class NfcTestActivity extends Activity {
         Parcel data=Parcel.obtain(),reply=Parcel.obtain();
         try {
             String serviceVersion=call(DiagnosticService.SERVICE_VERSION);
-            if(!"11".equals(serviceVersion))throw new IOException("Shizuku 诊断服务版本不匹配，请重启 Shizuku，再回到喵墨连接 NFC 服务。");
+            if(!"12".equals(serviceVersion))throw new IOException("Shizuku 诊断服务版本不匹配，请重启 Shizuku，再回到喵墨连接 NFC 服务。");
             data.writeInterfaceToken(DiagnosticService.DESCRIPTOR);data.writeStrongBinder(qOwner);data.writeInt(getSharedPreferences("nfc_compat",0).getBoolean("allow_unverified_rf_snapshot",false)?1:0);
             data.writeInt(getSharedPreferences("nfc_compat",0).getBoolean("allow_st54l_experiment",false)?1:0);
             if(!binder.transact(DiagnosticService.Q_START,data,reply,0))throw new IOException("Q-Poll 服务版本过旧");reply.readException();String result=reply.readString();if(result==null || result.startsWith("ERROR "))throw new IOException(result);return result;
@@ -263,16 +285,16 @@ public final class NfcTestActivity extends Activity {
     private JSONObject compatibilityReport(boolean probeShell)throws Exception{
         JSONObject report=new JSONObject().put("app",AppVersion.name(this)).put("manufacturer",Build.MANUFACTURER).put("model",Build.MODEL)
             .put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("nfc_hardware",adapter!=null)
-            .put("nfc_enabled",adapter!=null&&adapter.isEnabled()).put("standard_only",standardOnly()).put("shell_connected",remote!=null)
+            .put("nfc_enabled",adapter!=null&&adapter.isEnabled()).put("standard_only",standardOnly()).put("shell_connected",remote!=null).put("service_uid",serviceUid)
             .put("route",NfcCapabilities.STANDARD).put("vendor_ready",false)
             .put("support_status","not_checked")
             .put("reason","标准 NFC 不依赖手机品牌或 Shizuku。须先由系统发现并激活屏幕为 ISO-DEP，才能读取 D1 和推图；本模式不发送 7A 唤醒短帧。")
             .put("scope","只读接口检查；未寻卡、未发送 APDU，不代表实屏验证通过");
         if(probeShell&&remote!=null){
             String serviceVersion=call(DiagnosticService.SERVICE_VERSION);report.put("diagnostic_service_version",serviceVersion);
-            if(!"11".equals(serviceVersion))return report.put("diagnostic_service_compatible",false).put("route",NfcCapabilities.STANDARD).put("vendor_ready",false).put("support_status","service_stale")
+            if(!"12".equals(serviceVersion))return report.put("diagnostic_service_compatible",false).put("route",NfcCapabilities.STANDARD).put("vendor_ready",false).put("support_status","service_stale")
                 .put("reason","Shizuku NFC 服务版本较旧（"+serviceVersion+"）；未调用厂商接口，将尝试标准 NFC。要使用专用寻卡，请重启 Shizuku 后重新连接。")
-                .put("diagnostic_service_error","expected 11, received "+serviceVersion);
+                .put("diagnostic_service_error","expected 12, received "+serviceVersion);
             report.put("diagnostic_service_compatible",true);
             Parcel data=Parcel.obtain(),reply=Parcel.obtain();IBinder binder=remote;
             try{
@@ -305,7 +327,7 @@ public final class NfcTestActivity extends Activity {
     private void recordCompatibility(SessionLog s,JSONObject report,String stage)throws Exception{
         s.write("compatibility.json",report.toString(2));s.event("compatibility_report",report.toString());
         JSONObject permissions=new JSONObject().put("nfc_permission",checkSelfPermission(android.Manifest.permission.NFC)==PackageManager.PERMISSION_GRANTED)
-            .put("shell_connected",remote!=null);
+            .put("shell_connected",remote!=null).put("service_uid",serviceUid);
         try{boolean running=Shizuku.pingBinder();permissions.put("shizuku_running",running);if(running)permissions.put("shizuku_permission",Shizuku.checkSelfPermission()).put("shizuku_uid",Shizuku.getUid());}catch(Throwable unavailable){permissions.put("shizuku_check_error",unavailable.toString());}
         JSONObject device=new JSONObject().put("manufacturer",Build.MANUFACTURER).put("brand",Build.BRAND).put("model",Build.MODEL).put("device",Build.DEVICE)
             .put("android",Build.VERSION.RELEASE).put("sdk",Build.VERSION.SDK_INT).put("display",Build.DISPLAY).put("fingerprint",Build.FINGERPRINT).put("security_patch",Build.VERSION.SECURITY_PATCH);
@@ -358,8 +380,8 @@ public final class NfcTestActivity extends Activity {
         PicturePanel.Frame frame=mode==3 ? pictures.frame() : null;
         if(mode==3 && frame==null) { show("请先选择图片，等待四色预览生成。"); return; }
         if(mode!=0 && (adapter==null || !adapter.isEnabled())) { show("请先开启系统 NFC。"); return; }
-        boolean probeVendor=NfcCapabilities.probeVendor(mode,standardOnly(),remote!=null);
-        if(mode==4&&remote==null){show("专用 Q-Poll 对照需要 Shizuku；检测屏幕和推图可使用标准 NFC。");connectShizuku();return;}
+        boolean probeVendor=NfcCapabilities.probeVendor(mode,standardOnly(),hasVerifiedService());
+        if(mode==4&&!hasVerifiedService()){show("专用 Q-Poll 对照需要已验证的 Shizuku 服务；检测屏幕和推图可使用标准 NFC。");connectShizuku();return;}
         try { session=new SessionLog(this); } catch(Exception e) { error("session_error",e); return; }
         SessionLog s=session; int token=epoch.incrementAndGet(); active=true; tagSeen.set(false); pictures.setBusy(true);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
